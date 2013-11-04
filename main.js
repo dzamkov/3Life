@@ -13,7 +13,16 @@ function init() {
         program.view = gl.getUniformLocation(program, "view");
 	});
 	
-	buffer = new StreamingArrayBuffer(9, 500000);
+	buffer = new StreamingArrayBuffer(18, 300);
+	var mat = new Render.Material(1.0, 0.0, 0.0);
+	var a = Render.merge(mat, Render.empty, mat, Render.inside);
+	var b = Render.merge(mat, Render.empty, Render.empty, mat);
+	var c = Render.merge(mat, Render.inside, Render.inside, Render.inside);
+	var d = Render.merge(a, b, c, b);
+	var e = Render.merge(a, b, c, d);
+	var f = Render.merge(d, b, e, d);
+	Render.output(buffer, f, mat, 2.0, -1.0, -1.0);
+	buffer.flush();
 	
 	onResize();
 	window.addEventListener('resize', onResize, false);
@@ -27,7 +36,7 @@ function init() {
 		elapsedTime += (currentTime - lastTime) / 1000.0;
 		elapsedFrames++;
 		lastTime = currentTime;
-		if (elapsedTime > 1.0) {
+		while (elapsedTime > 1.0) {
 			document.title = elapsedFrames;
 			interval = elapsedTime / elapsedFrames;
 			elapsedTime -= 1.0;
@@ -36,7 +45,6 @@ function init() {
 		requestAnimationFrame(animate);
 		onRenderFrame();
 		onUpdateFrame(interval);
-		
 	})();
 }
 
@@ -64,33 +72,11 @@ function onRenderFrame() {
 		var vertex_position;
 		gl.vertexAttribPointer(vertex_position, 3, gl.FLOAT, false, 0, 0);
 		gl.enableVertexAttribArray(vertex_position);
-		gl.drawArrays(gl.TRIANGLES, 0, 3 * buffer.maxItemCount);
+		gl.drawArrays(gl.TRIANGLES, 0, 6 * buffer.maxItemCount);
 		gl.disableVertexAttribArray(vertex_position);
 	}
 }
 
-var time = 0;
 function onUpdateFrame(delta) {
-	time += delta;
-	for (var j = 0; j < 10; j++) {
-		if (Math.random() < 0.7) {
-			buffer.clear(Math.floor(Math.random() * buffer.maxItemCount));
-		} else {
-			var i = buffer.findFree();
-			if (i >= 0) {
-				var data = buffer.edit(i);
-				data[0] = Math.random() * 2.0 - 1.0;
-				data[1] = Math.random() * 2.0 - 1.0;
-				data[2] = Math.random() * 2.0 - 1.0;
-				data[3] = Math.random() * 2.0 - 1.0;
-				data[4] = Math.random() * 2.0 - 1.0;
-				data[5] = Math.random() * 2.0 - 1.0;
-				data[6] = Math.random() * 2.0 - 1.0;
-				data[7] = Math.random() * 2.0 - 1.0;
-				data[8] = Math.random() * 2.0 - 1.0;
-				data[9] = Math.random() * 2.0 - 1.0;
-			}
-		}
-	}
-	buffer.flush();
+
 }

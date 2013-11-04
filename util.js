@@ -4,7 +4,7 @@ function Promise() {
 	this.value = null;
 }
 
-Promise.prototype.fufill = function (value) {
+Promise.prototype.fufill = function(value) {
 	this.value = value;
 	if (this.onComplete !== null) {
 		this.onComplete.call(null, value)
@@ -12,7 +12,7 @@ Promise.prototype.fufill = function (value) {
 	}
 }
 
-Promise.prototype.done = function (onComplete) {
+Promise.prototype.done = function(onComplete) {
 	if (this.hasValue) {
 		onComplete.call(null, this.value);
 	} else {
@@ -21,7 +21,7 @@ Promise.prototype.done = function (onComplete) {
 		} else {
 			var current = this.onComplete;
 			var next = onComplete;
-			this.onComplete = function (value) {
+			this.onComplete = function(value) {
 				current(value);
 				next(value);
 			}
@@ -29,7 +29,7 @@ Promise.prototype.done = function (onComplete) {
 	}
 }
 
-Promise.prototype.map = function (map) {
+Promise.prototype.map = function(map) {
 	var promise = new Promise();
 	this.done(function (value) { 
 		promise.fufill(map(value)); 
@@ -40,7 +40,7 @@ Promise.prototype.map = function (map) {
 function join(sources, create) {
 	var promise = new Promise();
 	var count = 0;
-	var onOneComplete = function () {
+	var onOneComplete = function() {
 		count++;
 		if (count >= sources.length) {
 			var results = new Array(sources.length);
@@ -66,6 +66,114 @@ function loadText(url) {
 	request.send();
 	return promise;
 }
+
+// Correct modulo for negative numbers.
+Number.prototype.mod = function(n) {
+	return ((this % n) + n) % n;
+}
+
+// The hash code given to next object for which one is needed,
+// but not supplied.
+var nextHash = 1987;
+
+// Gets the hash code for the given object.
+function hash(object) {
+	return object.hash || (object.hash = (nextHash += 53));
+}
+
+// Determines whether the given objects are equal.
+function equals(a, b) {
+	return a.equals(b);
+}
+
+// An implementation of a hashtable that stores set of objects,
+// using linear probing for collision resolution. 'null' is interpreted as
+// a special value and thus can not be stored in the HashSet.
+function HashSet(initialCapacity) {
+	this.count = 0;
+	this.buckets = new Array(initialCapacity);
+	for (var i = 0; i < this.buckets.length; i++) {
+		this.buckets[i] = null;
+	}
+	this.maxLoadFactor = 0.5;
+}
+
+// Checks if the given item is in the HashSet. If so, it returns the
+// item as it is stored in the HashSet. If not, the item is added to
+// the hash-set and is returned as-is.
+HashSet.prototype.check = function(item) {
+	var index = hash(item).mod(this.buckets.length);
+	while (true) {
+		if (this.buckets[index] === null) {
+			this.buckets[index] = item;
+			this.count++;
+			if (this.count / this.buckets.length > this.maxLoadFactor) this.expand();
+			return item;
+		} else {
+			if (equals(item, this.buckets[index])) {
+				return this.buckets[index];
+			}
+		}
+		index++;
+	}
+}
+
+// Inserts the given item into the HashSet with the assumption that it is
+// not already in it.
+HashSet.prototype.insert = function(item) {
+	var index = hash(item).mod(this.buckets.length);
+	while (this.buckets[index] !== null) {
+		index++;
+	}
+	this.buckets[index] = item;
+	this.count++;
+}
+
+// Changes the capacity of the HashSet.
+HashSet.prototype.resize = function(capacity) {
+	var oldBuckets = this.buckets;
+	this.buckets = new Array(capacity);
+	for (var i = 0; i < this.buckets.length; i++) {
+		this.buckets[i] = null;
+	}
+	this.count = 0;
+	for (var i = 0; i < oldBuckets.length; i++) {
+		var item = oldBuckets[i];
+		if (item !== null) this.insert(item);
+	}
+}
+
+// Resizes the HashSet in order to lower the load factor.
+HashSet.prototype.expand = function() {
+	this.resize(this.buckets.length * 2 + 1);
+}
+
+
+// A node with 4 quadrants as its children.
+function Quad(nn, np, pn, pp) {
+	this.nn = nn;
+	this.np = np;
+	this.pn = pn;
+	this.pp = pp;
+	this.hash = 257;
+	this.hash = this.hash + hash(nn) | 0;
+	this.hash = this.hash * 263 | 0;
+	this.hash = this.hash + hash(np) | 0;
+	this.hash = this.hash * 269 | 0;
+	this.hash = this.hash + hash(pn) | 0;
+	this.hash = this.hash * 271 | 0;
+	this.hash = this.hash + hash(pp) | 0;
+}
+
+// Define equality for quads.
+Quad.prototype.equals = function(other) {
+	return other instanceof Quad &&
+		this.nn === other.nn &&
+		this.np === other.np &&
+		this.pn === other.pn &&
+		this.pp === other.pp;
+}
+
 
 // Creates a global function that defers to the given method with
 // the "this" parameter set to the given object.
@@ -97,7 +205,7 @@ function createGLContext(canvas) {
 }
 
 // Creates and compiles a shader of the given type from the given source.
-WebGLRenderingContext.prototype.loadShader = function (type, source) {
+WebGLRenderingContext.prototype.loadShader = function(type, source) {
 	var shader = this.createShader(type);
 	this.shaderSource(shader, source);
 	this.compileShader(shader);
@@ -108,18 +216,18 @@ WebGLRenderingContext.prototype.loadShader = function (type, source) {
 }
 
 // Creates and compiles a vertex shader from the given source.
-WebGLRenderingContext.prototype.loadVertexShader = function (source) {
+WebGLRenderingContext.prototype.loadVertexShader = function(source) {
 	return this.loadShader(this.VERTEX_SHADER, source);
 }
 
 // Creates and compiles a fragment shader from the given source.
-WebGLRenderingContext.prototype.loadFragmentShader = function (source) {
+WebGLRenderingContext.prototype.loadFragmentShader = function(source) {
 	return this.loadShader(this.FRAGMENT_SHADER, source);
 }
 
 // Creates and links a shader program from the given vertex and
 // fragment shaders.
-WebGLRenderingContext.prototype.loadProgram = function (vs, fs) {
+WebGLRenderingContext.prototype.loadProgram = function(vs, fs) {
 	var program = this.createProgram();
 	this.attachShader(program, vs);
 	this.attachShader(program, fs);

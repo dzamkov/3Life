@@ -72,6 +72,13 @@ Number.prototype.mod = function(n) {
 	return ((this % n) + n) % n;
 }
 
+// Replaces the first occurence of the given value in an array
+// with the specified value.
+Array.prototype.replace = function(from, to) {
+	var i = this.indexOf(from);
+	if (i >= 0) this[i] = to;
+}
+
 // The hash code given to next object for which one is needed,
 // but not supplied.
 var nextHash = 1987;
@@ -149,8 +156,15 @@ HashSet.prototype.expand = function() {
 }
 
 
-// A node with 4 quadrants as its children.
-function Quad(nn, np, pn, pp) {
+// Note: I understand that 'Quadret' and 'Octet' are not the
+// accepted terms for things they describe here. I did not
+// want to use 'QuadTree' and 'Octree' because of the inconsistent
+// capitalization and the fact that they focus on the entire tree,
+// rather than particular node.
+
+// A node in a 4-ary tree where children are spatially-related.
+// Each child represents a quadrant of a square.
+function Quadret(nn, np, pn, pp) {
 	this.nn = nn;
 	this.np = np;
 	this.pn = pn;
@@ -165,15 +179,43 @@ function Quad(nn, np, pn, pp) {
 	this.hash = this.hash + hash(pp) | 0;
 }
 
-// Define equality for quads.
-Quad.prototype.equals = function(other) {
-	return other instanceof Quad &&
+// Define equality for quadrets.
+Quadret.prototype.equals = function(other) {
+	return other instanceof Quadret &&
 		this.nn === other.nn &&
 		this.np === other.np &&
 		this.pn === other.pn &&
 		this.pp === other.pp;
 }
 
+// An orthogonal rectangular area in 2D space.
+function Rect(nx, ny, px, py) {
+	this.nx = nx;
+	this.ny = ny;
+	this.px = px;
+	this.py = py;
+}
+
+// Applies a scale, then a translation, to this rectangle.
+Rect.prototype.transform = function(scale, x, y) {
+	return new Rect(
+		this.nx * scale + x,
+		this.ny * scale + y,
+		this.px * scale + x,
+		this.py * scale + y);
+}
+
+// Determines whether this rectangle shares a border with
+// a containing rectangle.
+Rect.prototype.borders = function(other) {
+	return this.nx == other.nx ||
+		this.ny == other.ny ||
+		this.px == other.px ||
+		this.py == other.py;
+}
+
+// A square with edge-length one going from (0.0, 0.0) to (1.0, 1.0).
+Rect.unit = new Rect(0.0, 0.0, 1.0, 1.0);
 
 // Creates a global function that defers to the given method with
 // the "this" parameter set to the given object.

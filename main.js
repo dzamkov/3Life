@@ -14,14 +14,44 @@ function init() {
 	});
 	
 	buffer = new StreamingArrayBuffer(18, 300);
-	var mat = new Render.Material(1.0, 0.0, 0.0);
-	var a = Render.merge(mat, Render.empty, mat, Render.inside);
-	var b = Render.merge(mat, Render.empty, Render.empty, mat);
-	var c = Render.merge(mat, Render.inside, Render.inside, Render.inside);
+	var red = new Render.Material(1.0, 0.0, 0.0);
+	var a = Render.merge(red, Render.inside, red, Render.inside);
+	var b = Render.merge(red, Render.empty, Render.empty, red);
+	var c = Render.merge(red, Render.inside, Render.inside, Render.inside);
 	var d = Render.merge(a, b, c, b);
 	var e = Render.merge(a, b, c, d);
-	var f = Render.merge(d, b, e, d);
-	Render.output(buffer, f, mat, 2.0, -1.0, -1.0);
+	var f = Render.merge(e, d, d, a);
+	var view = Render.view(f).transform(8.0, -4.0, -4.0);
+	
+	function write(mat, rect) {
+		if (mat === red) {
+			var data = buffer.push();
+			data[0] = rect.nx + 0.1;
+			data[1] = rect.ny + 0.1;
+			data[2] = 0.0;
+			data[3] = rect.px - 0.1;
+			data[4] = rect.ny + 0.1;
+			data[5] = 0.0;
+			data[6] = rect.nx + 0.1;
+			data[7] = rect.py - 0.1;
+			data[8] = 0.0;
+			data[9] = rect.nx + 0.1;
+			data[10] = rect.py - 0.1;
+			data[11] = 0.0;
+			data[12] = rect.px - 0.1;
+			data[13] = rect.ny + 0.1;
+			data[14] = 0.0;
+			data[15] = rect.px - 0.1;
+			data[16] = rect.py - 0.1;
+			data[17] = 0.0;
+		}
+	}
+	
+	var quads = view.all();
+	for (i = 0; i < quads.length; i++) {
+		var quad = quads[i];
+		write(quad.material, quad.lower);
+	}
 	buffer.flush();
 	
 	onResize();

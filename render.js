@@ -218,6 +218,11 @@ var Render = new function() {
 		return this.inner.concat(this.border);
 	}
 	
+	// Creates a variant of this View where all border Quads are considered inner Quads.
+	R.View.prototype.cut = function() {
+		return new R.View(this.all(), []);
+	}
+	
 	// Combines this view with another.
 	R.View.prototype.combine = function(other, area) {
 		var inner = this.inner.concat(other.inner);

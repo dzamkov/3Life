@@ -11,20 +11,26 @@ function init() {
 		program = value;
 		program.proj = gl.getUniformLocation(program, "proj");
         program.view = gl.getUniformLocation(program, "view");
+		program.color = gl.getUniformLocation(program, "color");
 	});
 	
-	buffer = new StreamingArrayBuffer(18, 300);
+	whiteBuffer = new StreamingArrayBuffer(18, 300);
+	redBuffer = new StreamingArrayBuffer(18, 300);
+	var white = new Render.Material(1.0, 1.0, 1.0);
 	var red = new Render.Material(1.0, 0.0, 0.0);
-	var a = Render.merge(red, Render.inside, red, Render.inside);
-	var b = Render.merge(red, Render.empty, Render.empty, red);
-	var c = Render.merge(red, Render.inside, Render.inside, Render.inside);
-	var d = Render.merge(a, b, c, b);
+	var a = Render.merge(white, Render.inside, white, red);
+	var b = Render.merge(white, red, red, white);
+	var c = Render.merge(white, Render.inside, Render.inside, Render.inside);
+	var d = Render.merge(a, b, c, a);
 	var e = Render.merge(a, b, c, d);
 	var f = Render.merge(e, d, d, a);
 	var view = Render.view(f).transform(8.0, -4.0, -4.0);
 	
 	function write(mat, rect) {
-		if (mat === red) {
+		var buffer =
+			(mat === white) ? whiteBuffer :
+			(mat === red) ? redBuffer : null;
+		if (buffer) {
 			var data = buffer.push();
 			data[0] = rect.nx + 0.1;
 			data[1] = rect.ny + 0.1;
@@ -52,7 +58,8 @@ function init() {
 		var quad = quads[i];
 		write(quad.material, quad.lower);
 	}
-	buffer.flush();
+	whiteBuffer.flush();
+	redBuffer.flush();
 	
 	onResize();
 	window.addEventListener('resize', onResize, false);
@@ -88,22 +95,29 @@ function onRenderFrame() {
 	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 	if (program) {
 		gl.useProgram(program);
-		buffer.bind();
 		
 		var proj = mat4.create();
 		mat4.perspective(45, canvas.width / canvas.height, 0.1, 100.0, proj);
 		
 		var view = mat4.create();
-		mat4.lookAt([5, 5, 5], [0, 0, 0], [0, 0, 1], view);
+		mat4.lookAt([0, 1, 10], [0, 0, 0], [0, 0, 1], view);
 		
 		gl.uniformMatrix4fv(program.proj, false, proj);
         gl.uniformMatrix4fv(program.view, false, view);
 		
-		var vertex_position;
-		gl.vertexAttribPointer(vertex_position, 3, gl.FLOAT, false, 0, 0);
-		gl.enableVertexAttribArray(vertex_position);
-		gl.drawArrays(gl.TRIANGLES, 0, 6 * buffer.maxItemCount);
-		gl.disableVertexAttribArray(vertex_position);
+		
+		function renderBuffer(buffer, r, g, b) {
+			buffer.bind();
+			var vertex_position;
+			gl.uniform3f(program.color, r, g, b);
+			gl.vertexAttribPointer(vertex_position, 3, gl.FLOAT, false, 0, 0);
+			gl.enableVertexAttribArray(vertex_position);
+			gl.drawArrays(gl.TRIANGLES, 0, 6 * buffer.maxItemCount);
+			gl.disableVertexAttribArray(vertex_position);
+		}
+		
+		renderBuffer(whiteBuffer, 1.0, 1.0, 1.0);
+		renderBuffer(redBuffer, 1.0, 0.0, 0.0);
 	}
 }
 

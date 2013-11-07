@@ -132,6 +132,19 @@ var Render = new function() {
 			R.quadrets.check(new Quadret(nn, np, pn, pp));
 	}
 	
+	// Replaces all occurence of the given within a node with another node.
+	R.replace = function(node, from, to) {
+		if (node == from) return to;
+		else if (node instanceof Quadret) {
+			return R.merge(
+				R.replace(node.nn, from, to),
+				R.replace(node.np, from, to),
+				R.replace(node.pn, from, to),
+				R.replace(node.pp, from, to));
+		}
+		else return node;
+	}
+	
 	// Describes a rectangular rendering primitive that can be used to display
 	// an area on a quadret. Each Quad has a single material, and a lower and upper
 	// bound on the area it occupies. The lower bound is the smallest rectangle that

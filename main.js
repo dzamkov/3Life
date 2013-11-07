@@ -30,10 +30,13 @@ function init() {
 			return Render.merge(randNode(n), randNode(n), randNode(n), randNode(n));
 		}
 	}
-	var node = randNode(0);
-	var view = Render.view(node).transform(8.0, -4.0, -4.0);
+	var node1 = randNode(0);
+	var node2 = Render.replace(node1, Render.inside, Render.empty);
 	
-	function write(mat, rect) {
+	var view1 = Render.view(node1).transform(4.0, -5.0, -2.0);
+	var view2 = Render.view(node2).transform(4.0, 1.0, -2.0);
+	
+	function writeQuad(mat, rect) {
 		var buffer =
 			(mat === white) ? whiteBuffer :
 			(mat === red) ? redBuffer : null;
@@ -60,11 +63,17 @@ function init() {
 		}
 	}
 	
-	var quads = view.all();
-	for (i = 0; i < quads.length; i++) {
-		var quad = quads[i];
-		write(quad.material, quad.lower);
+	function writeView(view) {
+		var quads = view.all();
+		for (i = 0; i < quads.length; i++) {
+			var quad = quads[i];
+			writeQuad(quad.material, quad.lower);
+		}
 	}
+	
+	writeView(view1);
+	writeView(view2);
+	
 	whiteBuffer.flush();
 	redBuffer.flush();
 	

@@ -214,6 +214,30 @@ Rect.prototype.borders = function(other) {
 		this.py == other.py;
 }
 
+// Tries merging this rectangle with an adjacent rectangle. Returns
+// null if the rectangles are not adjacent. Note that the rectangles
+// must completely share an edge to be considered adjacent.
+Rect.prototype.merge = function(other) {
+	if (this.px == other.nx) {
+		if (this.ny == other.ny && this.py == other.py) {
+			return new Rect(this.nx, this.ny, other.px, this.py);
+		}
+	} else if (other.px == this.nx) {
+		if (this.ny == other.ny && this.py == other.py) {
+			return new Rect(other.nx, this.ny, this.px, this.py);
+		}
+	} else if (this.py == other.ny) {
+		if (this.nx == other.nx && this.px == other.px) {
+			return new Rect(this.nx, this.ny, this.px, other.py);
+		}
+	} else if (other.py == this.ny) {
+		if (this.nx == other.nx && this.px == other.px) {
+			return new Rect(this.nx, other.ny, this.px, this.py);
+		}
+	}
+	return null;
+}
+
 // A square with edge-length one going from (0.0, 0.0) to (1.0, 1.0).
 Rect.unit = new Rect(0.0, 0.0, 1.0, 1.0);
 

@@ -18,13 +18,20 @@ function init() {
 	redBuffer = new StreamingArrayBuffer(18, 300);
 	var white = new Render.Material(1.0, 1.0, 1.0);
 	var red = new Render.Material(1.0, 0.0, 0.0);
-	var a = Render.merge(white, Render.inside, white, red);
-	var b = Render.merge(white, red, red, white);
-	var c = Render.merge(white, Render.inside, Render.inside, Render.inside);
-	var d = Render.merge(a, b, c, a);
-	var e = Render.merge(a, b, c, d);
-	var f = Render.merge(e, d, d, a);
-	var view = Render.view(f).transform(8.0, -4.0, -4.0);
+	
+	function randNode(depth) {
+		if (Math.random() < depth * 0.3) {
+			var x = Math.random();
+			if (x < 0.3) return red;
+			else if (x < 0.7) return white;
+			else return Render.inside;
+		} else {
+			var n = depth + 1;
+			return Render.merge(randNode(n), randNode(n), randNode(n), randNode(n));
+		}
+	}
+	var node = randNode(0);
+	var view = Render.view(node).transform(8.0, -4.0, -4.0);
 	
 	function write(mat, rect) {
 		var buffer =

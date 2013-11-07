@@ -156,10 +156,7 @@ var Render = new function() {
 	// In order for this to succeed, the other Quad most be adjacent to this
 	// one (sharing part of an upper bound edged).
 	R.Quad.prototype.merge = function(other) {
-		if (this.material == other.material ||
-			this.material === null ||
-			other.material === null)
-		{
+		if (this.material == other.material) {
 			function mergeOnX(n, p) {
 				if (n.lower.ny >= p.upper.ny &&
 					n.lower.py <= p.upper.py &&
@@ -200,17 +197,44 @@ var Render = new function() {
 		return null;
 	}
 	
-	// A quad that describes an inside area. Note that the material of null indicates
-	// that it can be rendered as any material (or even a combination of materials).
-	R.inside.quad = new R.Quad(null, new Rect(1.0, 1.0, 0.0, 0.0), Rect.unit);
+	// Tries merging this Quad into a free area defined by a rectangle. Returns
+	// null if not possible. In order for this to succeed, the rectangle must
+	// be adjacent to the upper bound of this quad. On success, the lower bound
+	// and material of the returned Quad will be the same as this one.
+	R.Quad.prototype.mergeInto = function(rect) {
+		if (this.upper.px == rect.nx) {
+			if (this.upper.ny >= rect.ny && this.upper.py <= rect.py) {
+				return new R.Quad(this.material, this.lower, new Rect(
+					this.upper.nx, this.upper.ny, rect.px, this.upper.py));
+			}
+		} else if (rect.px == this.upper.nx) {
+			if (this.upper.ny >= rect.ny && this.upper.py <= rect.py) {
+				return new R.Quad(this.material, this.lower, new Rect(
+					rect.nx, this.upper.ny, this.upper.px, this.upper.py));
+			}
+		} else if (this.upper.py == rect.ny) {
+			if (this.upper.nx >= rect.nx && this.upper.px <= rect.px) {
+				return new R.Quad(this.material, this.lower, new Rect(
+					this.upper.nx, this.upper.ny, this.upper.px, rect.py));
+			}
+		} else if (rect.py == this.upper.ny) {
+			if (this.upper.nx >= rect.nx && this.upper.px <= rect.px) {
+				return new R.Quad(this.material, this.lower, new Rect(
+					this.upper.nx, rect.ny, this.upper.px, this.upper.py));
+			}
+		}
+		return null;
+	}
 	
 	// Contains a set of Quads within an area, such as one defined by a quadret. The
 	// View stores border quads (those that share part of an edge with the view area)
 	// seperately from inner quads (those that don't share a border with the view area).
-	// 'R.inside.quad' and variants should be excluded from the set of inner quads.
-	R.View = function(inner, border) {
+	// A View additionally stores a set of "free" rectangles where quads of any material
+	// can expand to. Only free rectangles on the border of the view area are tracked.
+	R.View = function(inner, border, free) {
 		this.inner = inner;
 		this.border = border;
+		this.free = free;
 	}
 	
 	// Gets all Quads in a view.
@@ -220,11 +244,11 @@ var Render = new function() {
 	
 	// Creates a variant of this View where all border Quads are considered inner Quads.
 	R.View.prototype.cut = function() {
-		return new R.View(this.all(), []);
+		return new R.View(this.all(), [], this.free);
 	}
 	
 	// Combines this view with another.
-	R.View.prototype.combine = function(other, area) {
+	R.View.prototype.merge = function(other, area) {
 		var inner = this.inner.concat(other.inner);
 		
 		// Merge border Quads.
@@ -234,10 +258,10 @@ var Render = new function() {
 			otherBorderMerged[i] = false;
 		for (var i = 0; i < this.border.length; i++) {
 			var a = this.border[i];
+			var merged;
 			for (var j = 0; j < other.border.length; j++) {
 				if (!otherBorderMerged[j]) {
 					var b = other.border[j];
-					var merged;
 					if (merged = a.merge(b)) {
 						a = merged;
 						otherBorderMerged[j] = true;
@@ -245,21 +269,78 @@ var Render = new function() {
 					}
 				}
 			}
+			if (!merged) {
+			
+				// Try merging into a free area, if a merge with
+				// a compatible Quad is not possible.
+				for (var j = 0; j < other.free.length; j++) {
+					var b = other.free[j];
+					if (merged = a.mergeInto(b)) {
+						a = merged;
+						break;
+					}
+				}
+			}
+			
+			// Add this Quad to the result list.
 			if (a.upper.borders(area)) {
 				border.push(a);
-			} else if (a.material !== null) {
+			} else {
 				inner.push(a);
 			}
 		}
 		for (var i = 0; i < other.border.length; i++) {
 			var b = other.border[i];
 			if (!otherBorderMerged[i]) {
-				border.push(b);
-			} else if (b.material !== null) {
-				inner.push(b);
+			
+				// Try merging into a free area.
+				for (var j = 0; j < this.free.length; j++) {
+					var a = this.free[j];
+					if (merged = b.mergeInto(a)) {
+						b = merged;
+						break;
+					}
+				}
+				
+				// Add this Quad to the result list.
+				if (b.upper.borders(area)) {
+					border.push(b);
+				} else {
+					inner.push(b);
+				}
 			}
 		}
-		return new R.View(inner, border);
+		
+		// Merge free areas.
+		var free = new Array();
+		var otherFreeMerged = new Array(other.free.length);
+		for (var i = 0; i < this.free.length; i++) {
+			var a = this.free[i];
+			for (var j = 0; j < other.free.length; j++) {
+				if (!otherFreeMerged[j]) {
+					var b = other.free[j];
+					var merged;
+					if (merged = a.merge(b)) {
+						a = merged;
+						otherFreeMerged[j] = true;
+						break;
+					}
+				}
+			}
+			if (a.borders(area)) {
+				free.push(a);
+			}
+		}
+		for (var i = 0; i < other.free.length; i++) {
+			var b = other.free[i];
+			if (!otherFreeMerged[i]) {
+				if (b.borders(area)) {
+					free.push(b);
+				}
+			}
+		}
+		
+		return new R.View(inner, border, free);
 	}
 	
 	
@@ -268,9 +349,13 @@ var Render = new function() {
 		function transformQuad(quad) {
 			return quad.transform(scale, x, y);
 		}
+		function transformRect(rect) {
+			return rect.transform(scale, x, y);
+		}
 		return new R.View(
 			this.inner.map(transformQuad), 
-			this.border.map(transformQuad));
+			this.border.map(transformQuad),
+			this.free.map(transformRect));
 	}
 	
 	// Gets a view for a node (quadret, material or special area). The coordinates of
@@ -279,23 +364,23 @@ var Render = new function() {
 	R.view = function(node) {
 		function compute(node) {
 			if (node instanceof R.Material) {
-				return new R.View([], [new R.Quad(node, Rect.unit, Rect.unit)]);
+				return new R.View([], [new R.Quad(node, Rect.unit, Rect.unit)], []);
 			} else if (node instanceof Quadret) {
 				var nn = R.view(node.nn).transform(0.5, 0.0, 0.0);
 				var np = R.view(node.np).transform(0.5, 0.0, 0.5);
 				var pn = R.view(node.pn).transform(0.5, 0.5, 0.0);
 				var pp = R.view(node.pp).transform(0.5, 0.5, 0.5);
-				var n = nn.combine(np, new Rect(0.0, 0.0, 0.5, 1.0));
-				var p = pn.combine(pp, new Rect(0.5, 0.0, 1.0, 1.0));
-				return n.combine(p, Rect.unit);
+				var n = nn.merge(np, new Rect(0.0, 0.0, 0.5, 1.0));
+				var p = pn.merge(pp, new Rect(0.5, 0.0, 1.0, 1.0));
+				return n.merge(p, Rect.unit);
 			}
 		}
 		return node.view || 
 			(node.view = compute(node)) ||
 			R.empty.view;
 	}
-	R.inside.view = new R.View([], [R.inside.quad]);
-	R.empty.view = new R.View([], []);
+	R.inside.view = new R.View([], [], [Rect.unit]);
+	R.empty.view = new R.View([], [], []);
 	
 	// Represents a renderable surface produced from a quadret. A surface is implicitly
 	// associated with a StreamingArrayBuffer, containing references to quads within 

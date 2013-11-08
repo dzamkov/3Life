@@ -79,6 +79,16 @@ Array.prototype.replace = function(from, to) {
 	if (i >= 0) this[i] = to;
 }
 
+// Determines whether this array has the same items as the
+// given array.
+Array.prototype.same = function(other) {
+	if (this.length != other.length) return false;
+	for (var i = 0; i < this.length; i++) {
+		if (this[i] !== other[i]) return false;
+	}
+	return true;
+}
+
 // The hash code given to next object for which one is needed,
 // but not supplied.
 var nextHash = 1987;

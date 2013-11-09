@@ -79,9 +79,27 @@ Array.prototype.replace = function(from, to) {
 	if (i >= 0) this[i] = to;
 }
 
+// Scales the values in this array by the given value.
+Array.prototype.scale = function(amount) {
+	var res = new Array(this.length);
+	for (var i = 0; i < this.length; i++) {
+		res[i] = this[i] * amount;
+	}
+	return res;
+}
+
+// Adds the values in this array with the values in the other array.
+Array.prototype.add = function(other) {
+	var res = new Array(this.length);
+	for (var i = 0; i < this.length; i++) {
+		res[i] = this[i] + other[i];
+	}
+	return res;
+}
+
 // Determines whether this array has the same items as the
 // given array.
-Array.prototype.same = function(other) {
+Array.prototype.equals = function(other) {
 	if (this.length != other.length) return false;
 	for (var i = 0; i < this.length; i++) {
 		if (this[i] !== other[i]) return false;
@@ -89,13 +107,33 @@ Array.prototype.same = function(other) {
 	return true;
 }
 
+// A list of primes used to create hash functions.
+var hashPrimes = [
+	263, 269, 271, 277, 281,
+	283, 293, 307, 311, 313,
+	317, 331, 337, 347, 349]
+	
+// Gets a hash for an array.
+Array.prototype.getHash = function() {
+	var h = 1709;
+	for(i = 0; i < this.length; i++) {
+		h += hash(this[i]);
+		h *= hashPrimes[i % hashPrimes.length];
+	}
+	return h;
+}
+
+
 // The hash code given to next object for which one is needed,
 // but not supplied.
 var nextHash = 1987;
 
 // Gets the hash code for the given object.
 function hash(object) {
-	return object.hash || (object.hash = (nextHash += 53));
+	return object.hash || 
+		(object.hash = object.getHash ?
+			object.getHash() :
+			nextHash += 53);
 }
 
 // Determines whether the given objects are equal.
@@ -164,92 +202,6 @@ HashSet.prototype.resize = function(capacity) {
 HashSet.prototype.expand = function() {
 	this.resize(this.buckets.length * 2 + 1);
 }
-
-
-// Note: I understand that 'Quadret' and 'Octet' are not the
-// accepted terms for things they describe here. I did not
-// want to use 'QuadTree' and 'Octree' because of the inconsistent
-// capitalization and the fact that they focus on the entire tree,
-// rather than particular node.
-
-// A node in a 4-ary tree where children are spatially-related.
-// Each child represents a quadrant of a square.
-function Quadret(nn, np, pn, pp) {
-	this.nn = nn;
-	this.np = np;
-	this.pn = pn;
-	this.pp = pp;
-	this.hash = 257;
-	this.hash = this.hash + hash(nn) | 0;
-	this.hash = this.hash * 263 | 0;
-	this.hash = this.hash + hash(np) | 0;
-	this.hash = this.hash * 269 | 0;
-	this.hash = this.hash + hash(pn) | 0;
-	this.hash = this.hash * 271 | 0;
-	this.hash = this.hash + hash(pp) | 0;
-}
-
-// Define equality for quadrets.
-Quadret.prototype.equals = function(other) {
-	return other instanceof Quadret &&
-		this.nn === other.nn &&
-		this.np === other.np &&
-		this.pn === other.pn &&
-		this.pp === other.pp;
-}
-
-// An orthogonal rectangular area in 2D space.
-function Rect(nx, ny, px, py) {
-	this.nx = nx;
-	this.ny = ny;
-	this.px = px;
-	this.py = py;
-}
-
-// Applies a scale, then a translation, to this rectangle.
-Rect.prototype.transform = function(scale, x, y) {
-	return new Rect(
-		this.nx * scale + x,
-		this.ny * scale + y,
-		this.px * scale + x,
-		this.py * scale + y);
-}
-
-// Determines whether this rectangle shares a border with
-// a containing rectangle.
-Rect.prototype.borders = function(other) {
-	return this.nx == other.nx ||
-		this.ny == other.ny ||
-		this.px == other.px ||
-		this.py == other.py;
-}
-
-// Tries merging this rectangle with an adjacent rectangle. Returns
-// null if the rectangles are not adjacent. Note that the rectangles
-// must completely share an edge to be considered adjacent.
-Rect.prototype.merge = function(other) {
-	if (this.px == other.nx) {
-		if (this.ny == other.ny && this.py == other.py) {
-			return new Rect(this.nx, this.ny, other.px, this.py);
-		}
-	} else if (other.px == this.nx) {
-		if (this.ny == other.ny && this.py == other.py) {
-			return new Rect(other.nx, this.ny, this.px, this.py);
-		}
-	} else if (this.py == other.ny) {
-		if (this.nx == other.nx && this.px == other.px) {
-			return new Rect(this.nx, this.ny, this.px, other.py);
-		}
-	} else if (other.py == this.ny) {
-		if (this.nx == other.nx && this.px == other.px) {
-			return new Rect(this.nx, other.ny, this.px, this.py);
-		}
-	}
-	return null;
-}
-
-// A square with edge-length one going from (0.0, 0.0) to (1.0, 1.0).
-Rect.unit = new Rect(0.0, 0.0, 1.0, 1.0);
 
 // Creates a global function that defers to the given method with
 // the "this" parameter set to the given object.

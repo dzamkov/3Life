@@ -14,27 +14,23 @@ function init() {
 		program.color = gl.getUniformLocation(program, "color");
 	});
 	
-	whiteBuffer = new StreamingArrayBuffer(18, 300);
-	redBuffer = new StreamingArrayBuffer(18, 300);
-	var white = new Render.Material(1.0, 1.0, 1.0);
-	var red = new Render.Material(1.0, 0.0, 0.0);
-	
+	whiteBuffer = new StreamingArrayBuffer(18, 5000);
+	redBuffer = new StreamingArrayBuffer(18, 5000);
+	var white = Surface.mat();
+	var red = Surface.mat();
 	function randNode(depth) {
-		if (Math.random() < depth * 0.3) {
+		if (Math.random() < depth * 0.2) {
 			var x = Math.random();
 			if (x < 0.3) return red;
 			else if (x < 0.7) return white;
-			else return Render.inside;
+			else return Surface.inside;
 		} else {
 			var n = depth + 1;
-			return Render.merge(randNode(n), randNode(n), randNode(n), randNode(n));
+			return Surface.Node.merge(randNode(n), randNode(n), randNode(n), randNode(n));
 		}
 	}
-	var node1 = randNode(0);
-	var node2 = Render.replace(node1, Render.inside, Render.empty);
-	
-	var view1 = Render.view(node1).transform(4.0, -5.0, -2.0);
-	var view2 = Render.view(node2).transform(4.0, 1.0, -2.0);
+	var node = Surface.Node.merge(red, randNode(1), randNode(1), white);
+	var view = Surface.view(node).transform(8.0, [0.0, 0.0]);
 	
 	function writeQuad(mat, rect) {
 		var buffer =
@@ -42,37 +38,36 @@ function init() {
 			(mat === red) ? redBuffer : null;
 		if (buffer) {
 			var data = buffer.push();
-			data[0] = rect.nx + 0.1;
-			data[1] = rect.ny + 0.1;
+			var d = 0.01;
+			data[0] = rect.min[0] + d;
+			data[1] = rect.min[1] + d;
 			data[2] = 0.0;
-			data[3] = rect.px - 0.1;
-			data[4] = rect.ny + 0.1;
+			data[3] = rect.max[0] - d;
+			data[4] = rect.min[1] + d;
 			data[5] = 0.0;
-			data[6] = rect.nx + 0.1;
-			data[7] = rect.py - 0.1;
+			data[6] = rect.min[0] + d;
+			data[7] = rect.max[1] - d;
 			data[8] = 0.0;
-			data[9] = rect.nx + 0.1;
-			data[10] = rect.py - 0.1;
+			data[9] = rect.min[0] + d;
+			data[10] = rect.max[1] - d;
 			data[11] = 0.0;
-			data[12] = rect.px - 0.1;
-			data[13] = rect.ny + 0.1;
+			data[12] = rect.max[0] - d;
+			data[13] = rect.min[1] + d;
 			data[14] = 0.0;
-			data[15] = rect.px - 0.1;
-			data[16] = rect.py - 0.1;
+			data[15] = rect.max[0] - d;
+			data[16] = rect.max[1] - d;
 			data[17] = 0.0;
 		}
 	}
 	
 	function writeView(view) {
-		var quads = view.all();
+		var quads = view.allQuads();
 		for (i = 0; i < quads.length; i++) {
 			var quad = quads[i];
 			writeQuad(quad.material, quad.lower);
 		}
 	}
-	
-	writeView(view1);
-	writeView(view2);
+	writeView(view);
 	
 	whiteBuffer.flush();
 	redBuffer.flush();
@@ -116,7 +111,7 @@ function onRenderFrame() {
 		mat4.perspective(45, canvas.width / canvas.height, 0.1, 100.0, proj);
 		
 		var view = mat4.create();
-		mat4.lookAt([0, 1, 10], [0, 0, 0], [0, 0, 1], view);
+		mat4.lookAt([0, -3, 12], [0, 0, 0], [0, 0, 1], view);
 		
 		gl.uniformMatrix4fv(program.proj, false, proj);
         gl.uniformMatrix4fv(program.view, false, view);

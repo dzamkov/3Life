@@ -246,46 +246,33 @@ function Space(dimension) {
 	// description of the contents of each sector in the resulting subdivision.
 	function Node() {
 	
-		// Use a HashSet to store all constructed non-leaf nodes.
-		var all = new HashSet(13 << size);
-		
-		// Creates a new unique leaf node, a node that can not be decomposed
-		// into other nodes. For convenience, all children of a leaf node are
-		// itself.
-		function leaf() {
-			var node = new Array(size);
-			node.hash = hash(new Object());
-			for (var i = 0; i < size; i++) {
-				node[i] = node;
-			}
-			return node;
+		// Constructs a node.
+		function _Node(children, isLeaf) {
+			this.children = children;
+			this.isLeaf = isLeaf;
 		}
 		
-		// Determines whether the given node is a leaf node.
-		function isLeaf(node) {
-			return node[0] === node;
+		// Use a HashMap to store all nodes by their children.
+		var nodesByChildren = new HashMap(13 << size);
+		
+		// Creates a new unique leaf node, a node that can not be decomposed
+		// by recursion. For convenience, all children of a leaf node are
+		// set to the node itself.
+		function leaf() {
+			var children = new Array(size);
+			var node = new _Node(children, true);
+			for (var i = 0; i < size; i++) {
+				children[i] = node;
+			}
+			nodesByChildren.set(children, node);
+			return node;
 		}
 		
 		// Gets a node that has the given spatial children.
 		function get(children) {
-		
-			// Check if this is a combination of the same leaf
-			// node; if so, just return that node. (That's right,
-			// this function doesn't necessarily return a non-leaf
-			// node; better remember to check for that).
-			if (isLeaf(children[0])) {
-				var allEqual = true;
-				for (var i = 1; i < children.length; i++) {
-					if (children[0] !== children[i]) {
-						allEqual = false;
-						break;
-					}
-				}
-				if (allEqual) return children[0];
-			}
-			
-			// Return the node as it appears in 'all'.
-			return all.check(children);
+			return nodesByChildren.lookup(children, function(children) {
+				return new _Node(children, false);
+			});
 		}
 		
 		// Like get, but accepts the children as arguments instead of
@@ -298,22 +285,25 @@ function Space(dimension) {
 			return get(children);
 		}
 		
-		// Replaces all occurences of a leaf node in a given source
-		// with another leaf node.
-		function replace(source, from, to) {
-			if (source === from) return to;
-			if (isLeaf(source)) return source;
-			function replaceChild(source) { return replace(source, from, to); };
-			return get(source.map(replaceChild));
-		}
+		// Define node functions.
+		(function() {
+		
+			// Replaces all occurences of a given leaf node in this node
+			// with another leaf node.
+			this.prototype.replace = function(from, to) {
+				if (this === from) return to;
+				if (this.isLeaf) return this;
+				function replaceChild(source) { return source.replace(from, to); };
+				return get(this.children.map(replaceChild));
+			}
+		
+		}).call(_Node);
 		
 		// Define type exports.
 		var Node = { };
-		Node.isLeaf = isLeaf;
 		Node.leaf = leaf;
 		Node.get = get;
 		Node.merge = merge;
-		Node.replace = replace;
 		return Node;
 	}
 	

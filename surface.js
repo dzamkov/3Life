@@ -12,6 +12,18 @@ var Surface = new function() {
 	// be rendered in any way.
 	var inside = Node.leaf();
 	
+	// Contains a mapping of materials to their associated surface leaf node.
+	var nodesByMaterial = new HashMap(13);
+	
+	// Gets the leaf node for the given material.
+	function lookup(material) {
+		return nodesByMaterial.lookup(material, function(material) {
+			var node = Node.leaf();
+			node.material = material;
+			return node;
+		});
+	}
+	
 	// Describes a rectangular rendering primitive that can be used to display
 	// part of a surface. Each Quad has a single material, and a lower and upper
 	// bound on the area it occupies. The lower bound is the smallest rectangle that
@@ -111,7 +123,7 @@ var Surface = new function() {
 		
 		// Define exports.
 		this.merge = merge;
-	}).apply(Quad);
+	}).call(Quad);
 	
 	// Contains a set of Quads within an area, such as one defined by a surface node. The
 	// View stores border Quads (those that share part of an edge with the view area)
@@ -241,18 +253,18 @@ var Surface = new function() {
 		
 		// Define exports.
 		this.merge = merge;
-	}).apply(View);
+	}).call(View);
 	
 	// Gets the view for a node representing a surface.
 	function view(node) {
 		function compute(node) {
-			if (Node.isLeaf(node)) {
-				return new View([], [new Quad(node, Rect.unit, Rect.unit)], []);
+			if (node.isLeaf) {
+				return new View([], [new Quad(node.material, Rect.unit, Rect.unit)], []);
 			} else {
-				var nn = view(node[0]).transform(0.5, [-0.25, -0.25]);
-				var pn = view(node[1]).transform(0.5, [0.25, -0.25]);
-				var np = view(node[2]).transform(0.5, [-0.25, 0.25]);
-				var pp = view(node[3]).transform(0.5, [0.25, 0.25]);
+				var nn = view(node.children[0]).transform(0.5, [-0.25, -0.25]);
+				var pn = view(node.children[1]).transform(0.5, [0.25, -0.25]);
+				var np = view(node.children[2]).transform(0.5, [-0.25, 0.25]);
+				var pp = view(node.children[3]).transform(0.5, [0.25, 0.25]);
 				var ny = View.merge(nn, pn, Rect.create(-0.5, -0.5, 0.5, 0.0));
 				var py = View.merge(np, pp, Rect.create(-0.5, 0.0, 0.5, 0.5));
 				return View.merge(ny, py, Rect.unit);
@@ -267,9 +279,9 @@ var Surface = new function() {
 	
 	// Define exports.
 	this.Node = Node;
-	this.mat = Node.leaf;
 	this.empty = empty;
 	this.inside = inside;
+	this.lookup = lookup;
 	this.Quad = Quad;
 	this.View = View;
 	this.view = view;

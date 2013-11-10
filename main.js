@@ -1,4 +1,4 @@
-var canvas, buffer, program;
+var canvas, buffers, program;
 window.addEventListener('load', init, false);
 function init() {
 	canvas = document.getElementById('canvas');
@@ -14,50 +14,58 @@ function init() {
 		program.color = gl.getUniformLocation(program, "color");
 	});
 	
-	whiteBuffer = new StreamingArrayBuffer(18, 5000);
-	redBuffer = new StreamingArrayBuffer(18, 5000);
-	var white = Surface.mat();
-	var red = Surface.mat();
-	function randNode(depth) {
-		if (Math.random() < depth * 0.2) {
-			var x = Math.random();
-			if (x < 0.3) return red;
-			else if (x < 0.7) return white;
+	var white = Material.solid(1.0, 1.0, 1.0);
+	var red = Material.solid(1.0, 0.0, 0.0);
+	function randNode(depth, materials) {
+		if (Math.random() < depth * 0.2 - 0.2) {
+			var x = Math.floor(Math.random() * (materials.length + 1));
+			if (x < materials.length) return Surface.lookup(materials[x]);
 			else return Surface.inside;
 		} else {
 			var n = depth + 1;
-			return Surface.Node.merge(randNode(n), randNode(n), randNode(n), randNode(n));
+			var newMaterials = new Array();
+			while (Math.random() < 0.1) {
+				newMaterials.push(Material.solid(
+					Math.random() * 0.5 + 0.5,
+					Math.random() * 0.5 + 0.5,
+					Math.random() * 0.5 + 0.5));
+			}
+			materials = materials.concat(newMaterials);
+			return Surface.Node.merge(
+				randNode(n, materials), 
+				randNode(n, materials), 
+				randNode(n, materials), 
+				randNode(n, materials));
 		}
 	}
-	var node = Surface.Node.merge(red, randNode(1), randNode(1), white);
+	var node = randNode(0, [white]);
 	var view = Surface.view(node).transform(8.0, [0.0, 0.0]);
 	
+	buffers = new HashMap(5);
 	function writeQuad(mat, rect) {
-		var buffer =
-			(mat === white) ? whiteBuffer :
-			(mat === red) ? redBuffer : null;
-		if (buffer) {
-			var data = buffer.push();
-			var d = 0.01;
-			data[0] = rect.min[0] + d;
-			data[1] = rect.min[1] + d;
-			data[2] = 0.0;
-			data[3] = rect.max[0] - d;
-			data[4] = rect.min[1] + d;
-			data[5] = 0.0;
-			data[6] = rect.min[0] + d;
-			data[7] = rect.max[1] - d;
-			data[8] = 0.0;
-			data[9] = rect.min[0] + d;
-			data[10] = rect.max[1] - d;
-			data[11] = 0.0;
-			data[12] = rect.max[0] - d;
-			data[13] = rect.min[1] + d;
-			data[14] = 0.0;
-			data[15] = rect.max[0] - d;
-			data[16] = rect.max[1] - d;
-			data[17] = 0.0;
-		}
+		var data = buffers.lookup(mat, function(mat) {
+			return new StreamingArrayBuffer(18, 15000);
+		}).push();
+		
+		var d = 0.01;
+		data[0] = rect.min[0] + d;
+		data[1] = rect.min[1] + d;
+		data[2] = 0.0;
+		data[3] = rect.max[0] - d;
+		data[4] = rect.min[1] + d;
+		data[5] = 0.0;
+		data[6] = rect.min[0] + d;
+		data[7] = rect.max[1] - d;
+		data[8] = 0.0;
+		data[9] = rect.min[0] + d;
+		data[10] = rect.max[1] - d;
+		data[11] = 0.0;
+		data[12] = rect.max[0] - d;
+		data[13] = rect.min[1] + d;
+		data[14] = 0.0;
+		data[15] = rect.max[0] - d;
+		data[16] = rect.max[1] - d;
+		data[17] = 0.0;
 	}
 	
 	function writeView(view) {
@@ -68,9 +76,9 @@ function init() {
 		}
 	}
 	writeView(view);
-	
-	whiteBuffer.flush();
-	redBuffer.flush();
+	buffers.forEach(function(_, buffer) {
+		buffer.flush();
+	});
 	
 	onResize();
 	window.addEventListener('resize', onResize, false);
@@ -127,8 +135,13 @@ function onRenderFrame() {
 			gl.disableVertexAttribArray(vertex_position);
 		}
 		
-		renderBuffer(whiteBuffer, 1.0, 1.0, 1.0);
-		renderBuffer(redBuffer, 1.0, 0.0, 0.0);
+		gl.enable(gl.BLEND);
+		gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+		buffers.forEach(function(mat, buffer) {
+			if (mat instanceof Material.Solid) {
+				renderBuffer(buffer, mat.r, mat.g, mat.b);
+			}
+		});
 	}
 }
 

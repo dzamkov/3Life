@@ -31,7 +31,7 @@ var testWorld = (function() {
 	var x5 = Matter.merge(x4, x4, x4, x4, e, e, e, e);
 	var x6 = Matter.merge(x5, x5, x5, x5, e, e, e, e);
 	var x7 = Matter.merge(x6, x6, x6, x6, e, e, x4, e);
-	var x8 = Matter.merge(x7, x7, x7, x7, e, e, e, x5);
+	var x8 = Matter.merge(x7, x7, t, x5, e, e, e, e);
 	var x9 = Matter.merge(x8, x8, x8, x8, e, e, e, e);
 	return x8;
 })();

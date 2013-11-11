@@ -1,4 +1,4 @@
-var canvas, buffer, program;
+var canvas, scene, program;
 window.addEventListener('load', init, false);
 function init() {
 	canvas = document.getElementById('canvas');
@@ -16,7 +16,10 @@ function init() {
 		program.norm = gl.getAttribLocation(program, "norm");
 	});
 
-	buffer = new MatterBuffer(testWorld);
+	scene = new Render.Scene();
+	new Render.Matter(testWorld, scene);
+	scene.flush();
+	
 	gl.enable(gl.CULL_FACE);
 	gl.enable(gl.DEPTH_TEST);
 	
@@ -52,7 +55,8 @@ function onResize() {
 	gl.viewport(0, 0, canvas.width, canvas.height);
 }
 
-var x, y;
+var x = 0;
+var y = 0;
 function onMouseMove(event) {
 	x = event.clientX;
 	y = event.clientY;
@@ -86,7 +90,7 @@ function onRenderFrame() {
 		
 		gl.uniformMatrix4fv(program.proj, false, proj);
         gl.uniformMatrix4fv(program.view, false, view);
-		buffer.render();
+		scene.render();
 	}
 }
 

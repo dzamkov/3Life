@@ -356,81 +356,96 @@ var Surface = new function() {
 			if (node.isLeaf) {
 				return [];
 			} else {
-			
-				// Break the children of node into two groups based on which side of the
-				// center slice plane they are on.
-				var n = [
-					node.children[0],
-					node.children[xF],
-					node.children[yF],
-					node.children[xF | yF]];
-				var p = [
-					node.children[zF],
-					node.children[xF | zF],
-					node.children[yF | zF],
-					node.children[xF | yF | zF]];
-					
-				// Computes the slices within a subset of 4 nodes (like those above) and
-				// pushes them (in order) to the given result array, with the given position
-				// offset.
-				function withinPart(nodes, flip, res, pos) {
-					var slices = new Array(4);
-					var counter = new Array(4);
-					for (var i = 0; i < 4; i++) {
-						slices[i] = all(nodes[i], flip);
-						counter[i] = 0;
-					}
-					
-					// Merge slices from nodes.
-					while(true) {
-						var firstPos = 0.5;
+				function compute(node, flip) {
+				
+					// Break the children of node into two groups based on which side of the
+					// center slice plane they are on.
+					var n = [
+						node.children[0],
+						node.children[xF],
+						node.children[yF],
+						node.children[xF | yF]];
+					var p = [
+						node.children[zF],
+						node.children[xF | zF],
+						node.children[yF | zF],
+						node.children[xF | yF | zF]];
+						
+					// Computes the slices within a subset of 4 nodes (like those above) and
+					// pushes them (in order) to the given result array, with the given position
+					// offset.
+					function withinPart(nodes, flip, res, pos) {
+						var slices = new Array(4);
+						var counter = new Array(4);
 						for (var i = 0; i < 4; i++) {
-							if (counter[i] < slices[i].length) {
-								var slice = slices[i][counter[i]];
-								if (slice.pos < firstPos) {
-									firstPos = slice.pos;
+							slices[i] = all(nodes[i], flip);
+							counter[i] = 0;
+						}
+						
+						// Merge slices from nodes.
+						while(true) {
+							var firstPos = 0.5;
+							for (var i = 0; i < 4; i++) {
+								if (counter[i] < slices[i].length) {
+									var slice = slices[i][counter[i]];
+									if (slice.pos < firstPos) {
+										firstPos = slice.pos;
+									}
 								}
 							}
-						}
-						if (firstPos == 0.5) break;
-						var children = new Array(4);
-						for (var i = 0; i < 4; i++) {
-							if (counter[i] < slices[i].length) {
-								var slice = slices[i][counter[i]];
-								if (slice.pos == firstPos) {
-									children[i] = slice.val;
-									counter[i]++;
+							if (firstPos == 0.5) break;
+							var children = new Array(4);
+							for (var i = 0; i < 4; i++) {
+								if (counter[i] < slices[i].length) {
+									var slice = slices[i][counter[i]];
+									if (slice.pos == firstPos) {
+										children[i] = slice.val;
+										counter[i]++;
+									} else {
+										children[i] = within(nodes[i], firstPos, flip);
+									}
 								} else {
 									children[i] = within(nodes[i], firstPos, flip);
 								}
-							} else {
-								children[i] = within(nodes[i], firstPos, flip);
 							}
+							res.push({ 
+								pos : firstPos * 0.5 + pos,
+								val : Node.get(children) });
 						}
-						res.push({ 
-							pos : firstPos * 0.5 + pos,
-							val : Node.get(children) });
 					}
+					
+					
+					// Get center slice.
+					var children = new Array(4);
+					for (var i = 0; i < 4; i++) {
+						children[i] = between(n[i], p[i], flip);
+					}
+					var center = Node.get(children);
+					if (isVisible(center)) {
+						center = { pos : 0.0, val : center };
+					} else center = null;
+					
+					// Construct result by combining the slices in the first set of children, the
+					// center slice, and the slices from the second set of children.
+					var res = new Array();
+					withinPart(n, flip, res, -0.25);
+					if (center) res.push(center);
+					withinPart(p, flip, res, 0.25);
+					return res;
 				}
 				
-				
-				// Get center slice.
-				var children = new Array(4);
-				for (var i = 0; i < 4; i++) {
-					children[i] = between(n[i], p[i], flip);
+				// Make sure to save and use work we've already done.
+				var index = axis + (flip ? 3 : 0);
+				if (node.slices) {
+					if (node.slices[index]) {
+						return node.slices[index];
+					} else {
+						return node.slices[index] = compute(node, flip);
+					}
+				} else {
+					node.slices = new Array(6);
+					return node.slices[index] = compute(node, flip);
 				}
-				var center = Node.get(children);
-				if (isVisible(center)) {
-					center = { pos : 0.0, val : center };
-				} else center = null;
-				
-				// Construct result by combining the slices in the first set of children, the
-				// center slice, and the slices from the second set of children.
-				var res = new Array();
-				withinPart(n, flip, res, -0.25);
-				if (center) res.push(center);
-				withinPart(p, flip, res, 0.25);
-				return res;
 			}
 		}
 		

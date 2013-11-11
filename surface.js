@@ -4,24 +4,34 @@ var Surface = new function() {
 	// A spatial node that describes the visual contents of
 	// a square 2D area.
 	var Node = Area.Node();
-
-	// Represents an area that is completely transparent.
-	var empty = Node.leaf();
 	
 	// Represents an area that is not visible, and thus can 
 	// be rendered in any way.
 	var inside = Node.leaf();
 	
-	// Contains a mapping of materials to their associated surface leaf node.
-	var nodesByMaterial = new HashMap(13);
-	
 	// Gets the leaf node for the given material.
 	function lookup(material) {
-		return nodesByMaterial.lookup(material, function(material) {
-			var node = Node.leaf();
-			node.material = material;
-			return node;
-		});
+		if (material.node) return material.node;
+		var node = Node.leaf();
+		node.material = material;
+		material.node = node;
+		return node;
+	}
+	
+	// Represents an area that is empty.
+	var empty = lookup(Material.empty);
+	
+	// Determines whether a surface node is visible, that is,
+	// whether it has a non-(inside/empty) leaf.
+	function isVisible(node) {
+		if (node.isLeaf) {
+			return node !== inside && node !== empty;
+		} else {
+			return isVisible(node.children[0]) ||
+				isVisible(node.children[1]) ||
+				isVisible(node.children[2]) ||
+				isVisible(node.children[3]);
+		}
 	}
 	
 	// Describes a rectangular rendering primitive that can be used to display
@@ -277,12 +287,180 @@ var Surface = new function() {
 	inside.view = new View([], [], [Rect.unit]);
 	empty.view = new View([], [], []);
 	
+	// Contains functions for slicing (getting a surface for) matter along the given axis.
+	function Slice(axis) {
+		var z = axis;
+		var x = (axis + 1) % 3;
+		var y = (axis + 2) % 3;
+		
+		var zF = 1 << z;
+		var xF = 1 << x;
+		var yF = 1 << y;
+	
+		// Gets the surface between two nodes of matter that are assumed to be adjacent
+		// along the slice axis. The first of nodes will be the "back" of the surface unless
+		// the 'flip' parameter is set.
+		function between(n, p, flip) {
+			if (n.isLeaf && p.isLeaf) {
+				var n = n.material;
+				var p = p.material;
+				if (!flip) {
+					if (!p.isTransparent) return inside;
+					return lookup(n);
+				} else {
+					if (!n.isTransparent) return inside;
+					return lookup(p);
+				}
+			} else {
+				var children = new Array(4);
+				children[0] = between(n.children[zF], p.children[0], flip);
+				children[1] = between(n.children[xF | zF], p.children[xF], flip);
+				children[2] = between(n.children[yF | zF], p.children[yF], flip);
+				children[3] = between(n.children[xF | yF | zF], p.children[xF | yF], flip);
+				return Node.get(children);
+			}
+		}
+		
+		// Gets a slice of the given matter node along a plane with the given position
+		// relative to the center plane. The position should be within the exclusive
+		// bounds of -0.5 to 0.5. The 'flip' parameter is a boolean that indicates
+		// the direction of the slice when a surface is met.
+		function within(node, pos, flip) {
+			if (node.isLeaf) {
+				return node.material.isTransparent ? empty : inside;
+			} else {
+				if (pos == 0.0) {
+					var children = new Array(4);
+					children[0] = between(node.children[0], node.children[zF], flip);
+					children[1] = between(node.children[xF], node.children[xF | zF], flip);
+					children[2] = between(node.children[yF], node.children[yF | zF], flip);
+					children[3] = between(node.children[xF | yF], node.children[xF | yF | zF], flip);
+					return Node.get(children);
+				} else {
+					var nzF = (pos > 0.0) ? zF : 0;
+					var npos = pos * 2.0 - 1.0;
+					var children = new Array(4);
+					children[0] = within(node.children[nzF], npos, flip);
+					children[1] = within(node.children[xF | nzF], npos, flip);
+					children[2] = within(node.children[yF | nzF], npos, flip);
+					children[3] = within(node.children[xF | yF | nzF], npos, flip);
+					return Node.get(children);
+				}
+			}
+		}
+		
+		// Gets an ordered array of non-(inside/empty) slices in the given matter node
+		// which completely describe its visual content. The 'flip' parameter is a boolean
+		// that indicates the direction of the slice.
+		function all(node, flip) {
+			if (node.isLeaf) {
+				return [];
+			} else {
+			
+				// Break the children of node into two groups based on which side of the
+				// center slice plane they are on.
+				var n = [
+					node.children[0],
+					node.children[xF],
+					node.children[yF],
+					node.children[xF | yF]];
+				var p = [
+					node.children[zF],
+					node.children[xF | zF],
+					node.children[yF | zF],
+					node.children[xF | yF | zF]];
+					
+				// Computes the slices within a subset of 4 nodes (like those above) and
+				// pushes them (in order) to the given result array, with the given position
+				// offset.
+				function withinPart(nodes, flip, res, pos) {
+					var slices = new Array(4);
+					var counter = new Array(4);
+					for (var i = 0; i < 4; i++) {
+						slices[i] = all(nodes[i], flip);
+						counter[i] = 0;
+					}
+					
+					// Merge slices from nodes.
+					while(true) {
+						var firstPos = 0.5;
+						for (var i = 0; i < 4; i++) {
+							if (counter[i] < slices[i].length) {
+								var slice = slices[i][counter[i]];
+								if (slice.pos < firstPos) {
+									firstPos = slice.pos;
+								}
+							}
+						}
+						if (firstPos == 0.5) break;
+						var children = new Array(4);
+						for (var i = 0; i < 4; i++) {
+							if (counter[i] < slices[i].length) {
+								var slice = slices[i][counter[i]];
+								if (slice.pos == firstPos) {
+									children[i] = slice.val;
+									counter[i]++;
+								} else {
+									children[i] = within(nodes[i], firstPos, flip);
+								}
+							} else {
+								children[i] = within(nodes[i], firstPos, flip);
+							}
+						}
+						res.push({ 
+							pos : firstPos * 0.5 + pos,
+							val : Node.get(children) });
+					}
+				}
+				
+				
+				// Get center slice.
+				var children = new Array(4);
+				for (var i = 0; i < 4; i++) {
+					children[i] = between(n[i], p[i], flip);
+				}
+				var center = Node.get(children);
+				if (isVisible(center)) {
+					center = { pos : 0.0, val : center };
+				} else center = null;
+				
+				// Construct result by combining the slices in the first set of children, the
+				// center slice, and the slices from the second set of children.
+				var res = new Array();
+				withinPart(n, flip, res, -0.25);
+				if (center) res.push(center);
+				withinPart(p, flip, res, 0.25);
+				return res;
+			}
+		}
+		
+		// Projects a vector on a surface into 3D space.
+		function project(vec, pos) {
+			var res = new Array(3);
+			res[x] = vec[0];
+			res[y] = vec[1];
+			res[z] = pos;
+			return res;
+		}
+		
+		// Define exports.
+		var Slice = { }
+		Slice.between = between;
+		Slice.within = within;
+		Slice.all = all;
+		Slice.project = project;
+		return Slice;
+	}
+	
+	// Create Slice objects.
+	var Slice = [Slice(0), Slice(1), Slice(2)];
+	
 	// Define exports.
 	this.Node = Node;
-	this.empty = empty;
 	this.inside = inside;
 	this.lookup = lookup;
 	this.Quad = Quad;
 	this.View = View;
 	this.view = view;
+	this.Slice = Slice;
 }

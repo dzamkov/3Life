@@ -13,75 +13,57 @@ function init() {
         program.view = gl.getUniformLocation(program, "view");
 		program.color = gl.getUniformLocation(program, "color");
 	});
-	
-	var white = Material.solid(1.0, 1.0, 1.0);
-	var red = Material.solid(1.0, 0.0, 0.0);
-	function randNode(depth, materials) {
-		if (Math.random() < depth * 0.2 - 0.2) {
-			var x = Math.floor(Math.random() * (materials.length + 1));
-			if (x < materials.length) return Surface.lookup(materials[x]);
-			else return Surface.inside;
-		} else {
-			var n = depth + 1;
-			var newMaterials = new Array();
-			while (Math.random() < 0.1) {
-				newMaterials.push(Material.solid(
-					Math.random() * 0.5 + 0.5,
-					Math.random() * 0.5 + 0.5,
-					Math.random() * 0.5 + 0.5));
-			}
-			materials = materials.concat(newMaterials);
-			return Surface.Node.merge(
-				randNode(n, materials), 
-				randNode(n, materials), 
-				randNode(n, materials), 
-				randNode(n, materials));
-		}
-	}
-	var node = randNode(0, [white]);
-	var view = Surface.view(node).transform(8.0, [0.0, 0.0]);
-	
+
 	buffers = new HashMap(5);
-	function writeQuad(mat, rect) {
+	function writeQuad(mat, rect, project, flip, pos) {
 		var data = buffers.lookup(mat, function(mat) {
 			return new StreamingArrayBuffer(18, 15000);
 		}).push();
 		
-		var d = 0.01;
-		data[0] = rect.min[0] + d;
-		data[1] = rect.min[1] + d;
-		data[2] = 0.0;
-		data[3] = rect.max[0] - d;
-		data[4] = rect.min[1] + d;
-		data[5] = 0.0;
-		data[6] = rect.min[0] + d;
-		data[7] = rect.max[1] - d;
-		data[8] = 0.0;
-		data[9] = rect.min[0] + d;
-		data[10] = rect.max[1] - d;
-		data[11] = 0.0;
-		data[12] = rect.max[0] - d;
-		data[13] = rect.min[1] + d;
-		data[14] = 0.0;
-		data[15] = rect.max[0] - d;
-		data[16] = rect.max[1] - d;
-		data[17] = 0.0;
+		var a = project(rect.min, pos);
+		var b = project([rect.max[0], rect.min[1]], pos);
+		var c = project([rect.min[0], rect.max[1]], pos);
+		var d = project(rect.max, pos);
+		if (flip) {
+			var temp = b;
+			b = c;
+			c = temp;
+		}
+		
+		data[0] = a[0]; data[1] = a[1]; data[2] = a[2];
+		data[3] = b[0]; data[4] = b[1]; data[5] = b[2];
+		data[6] = c[0]; data[7] = c[1]; data[8] = c[2];
+		data[9] = c[0]; data[10] = c[1]; data[11] = c[2];
+		data[12] = b[0]; data[13] = b[1]; data[14] = b[2];
+		data[15] = d[0]; data[16] = d[1]; data[17] = d[2];
 	}
-	
-	function writeView(view) {
-		var quads = view.allQuads();
-		for (i = 0; i < quads.length; i++) {
-			var quad = quads[i];
-			writeQuad(quad.material, quad.lower);
+
+	var matter = testWorld;
+	for (var i = 0; i < 3; i++) {
+		for (var j = 0; j <= 1; j++) {
+			var flip = (j == 1);
+			var slices = Surface.Slice[i].all(matter, flip);
+			for (var k = 0; k < slices.length; k++) {
+				var view = Surface.view(slices[k].val);
+				var quads = view.allQuads();
+				for (var l = 0; l < quads.length; l++) {
+					var quad = quads[l];
+					writeQuad(quad.material, quad.lower, 
+						Surface.Slice[i].project, flip, slices[k].pos);
+				}
+			}
 		}
 	}
-	writeView(view);
 	buffers.forEach(function(_, buffer) {
 		buffer.flush();
 	});
 	
+	gl.enable(gl.CULL_FACE);
+	gl.enable(gl.DEPTH_TEST);
+	
 	onResize();
 	window.addEventListener('resize', onResize, false);
+	canvas.addEventListener('mousemove', onMouseMove, false);
 	
 	var lastTime = new Date().getTime();
 	var elapsedTime = 0.0;
@@ -110,6 +92,12 @@ function onResize() {
 	gl.viewport(0, 0, canvas.width, canvas.height);
 }
 
+var x, y;
+function onMouseMove(event) {
+	x = event.clientX;
+	y = event.clientY;
+}
+
 function onRenderFrame() {
 	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 	if (program) {
@@ -119,11 +107,19 @@ function onRenderFrame() {
 		mat4.perspective(45, canvas.width / canvas.height, 0.1, 100.0, proj);
 		
 		var view = mat4.create();
-		mat4.lookAt([0, -3, 12], [0, 0, 0], [0, 0, 1], view);
+		var mx = 1.0 - x / canvas.width * 2.0;
+		var my = y / canvas.height * 2.0 - 1.0;
+		mx *= 2.5;
+		my *= 1.5;
+		var d = 2.0;
+		mat4.lookAt([
+			d * Math.cos(mx) * Math.cos(my),
+			d * Math.sin(mx) * Math.cos(my),
+			d * Math.sin(my)],
+			[0, 0, 0], [0, 0, 1], view);
 		
 		gl.uniformMatrix4fv(program.proj, false, proj);
         gl.uniformMatrix4fv(program.view, false, view);
-		
 		
 		function renderBuffer(buffer, r, g, b) {
 			buffer.bind();
@@ -135,8 +131,6 @@ function onRenderFrame() {
 			gl.disableVertexAttribArray(vertex_position);
 		}
 		
-		gl.enable(gl.BLEND);
-		gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
 		buffers.forEach(function(mat, buffer) {
 			if (mat instanceof Material.Solid) {
 				renderBuffer(buffer, mat.r, mat.g, mat.b);

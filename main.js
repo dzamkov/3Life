@@ -1,4 +1,4 @@
-var canvas, scene, program;
+var canvas, scene, renderer, node, program;
 window.addEventListener('load', init, false);
 function init() {
 	canvas = document.getElementById('canvas');
@@ -17,7 +17,8 @@ function init() {
 	});
 
 	scene = new Render.Scene();
-	new Render.Matter(testWorld, scene);
+	renderer = new Render.Matter(scene);
+	renderer.set(node = testWorld);
 	scene.flush();
 	
 	gl.enable(gl.CULL_FACE);
@@ -94,6 +95,27 @@ function onRenderFrame() {
 	}
 }
 
+var time = 0.0;
 function onUpdateFrame(delta) {
-
+	time += delta;
+	if (time > 0.3) {
+		function randEdit(node, depth) {
+			if (Math.random() < depth * 0.2 - 0.3) {
+				return [redMatter, greenMatter, blueMatter][
+					Math.floor(Math.random() * 3)];
+			} else {
+				var i = Math.floor(Math.random() * 8);
+				var children = new Array(8);
+				for (var j = 0; j < 8; j++) {
+					children[j] = node.children[j];
+				}
+				children[i] = randEdit(children[i], depth + 1);
+				return Matter.get(children);
+			}
+		}
+		node = randEdit(node, 0);
+		renderer.reset(node);
+		scene.flush();
+		time = 0.0;
+	}
 }

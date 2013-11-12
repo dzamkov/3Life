@@ -67,6 +67,11 @@ function loadText(url) {
 	return promise;
 }
 
+// The global object. I know this is probably 'window' but I want to
+// distinguish between references to window objects (DOM, screens, etc) and
+// references to objects I define at the global scope.
+var Global = this;
+
 // Correct modulo for negative numbers.
 Number.prototype.mod = function(n) {
 	return ((this % n) + n) % n;

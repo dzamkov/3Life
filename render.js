@@ -192,41 +192,111 @@ var Render = new function() {
 	
 	}).call(Scene);
 	
-	// Allows the rendering of a matter node, which may be changed between frames.
-	// All geometry data for the matter node is pushed to a given scene.
-	function Matter(node, scene) {
-		for (var i = 0; i < 3; i++) {
-			var proj = Surface.Slice[i].project;
-			for (var j = 0; j <= 1; j++) {
-				var flip = (j == 1);
-				var slices = Surface.Slice[i].all(node, flip);
-				for (var k = 0; k < slices.length; k++) {
-					var view = Surface.view(slices[k].val);
-					var pos = slices[k].pos;
-					var quads = view.allQuads();
-					for (var l = 0; l < quads.length; l++) {
-						var quad = quads[l];
-						var rect = quad.lower;
-						var a = proj(rect.min, pos);
-						var b = proj([rect.max[0], rect.min[1]], pos);
-						var c = proj([rect.min[0], rect.max[1]], pos);
-						var d = proj(rect.max, pos);
-						if (flip) {
-							var temp = b;
-							b = c;
-							c = temp;
-						}
-						var norm = new Array(3);
-						norm[0] = norm[1] = norm[2] = 0.0;
-						norm[i] = flip ? -1.0 : 1.0;
-						scene.push(quad.material, a, b, c, d, norm);
+	// Allows rendering of a surface to a scene. The surface can be updated to make
+	// corresponding changes to the scene. Changes to the scene are automatic and
+	// no 'flush' method needs to be called on the renderer.
+	function Surface(scene, axis, flip, pos) {
+		this.scene = scene;
+		this.axis = axis;
+		this.flip = flip;
+		this.pos = pos;
+	}
+	
+	// Define surface renderer functions.
+	(function() {
+	
+		// Clears the node for this surface renderer. After this is called, use 'set'
+		// to set a new node, or ignore the renderer to make it go away.
+		this.prototype.clear = function() {
+			for (var i = 0; i < this.quadRefs.length; i++) {
+				this.scene.remove(this.quadRefs[i]);
+			}
+			this.quadRefs = null;
+		}
+	
+		// Sets the node to be rendered by this surface renderer. This may only be called
+		// after the renderer is cleared using 'clear', or when it's in its initial state.
+		this.prototype.set = function(node) {
+			var proj = Global.Surface.Slice[this.axis].project;
+			var quads = Global.Surface.view(node).allQuads();
+			this.quadRefs = new Array(quads.length);
+			for (var i = 0; i < quads.length; i++) {
+				var quad = quads[i];
+				var rect = quad.lower;
+				var a = proj(rect.min, this.pos);
+				var b = proj([rect.max[0], rect.min[1]], this.pos);
+				var c = proj([rect.min[0], rect.max[1]], this.pos);
+				var d = proj(rect.max, this.pos);
+				if (this.flip) {
+					var temp = b;
+					b = c;
+					c = temp;
+				}
+				var norm = new Array(3);
+				norm[0] = norm[1] = norm[2] = 0.0;
+				norm[this.axis] = this.flip ? -1.0 : 1.0;
+				this.quadRefs[i] = scene.push(quad.material, a, b, c, d, norm);
+			}
+		}
+	
+		// Clears this surface renderer and sets a new node to be rendered.
+		this.prototype.reset = function(node) {
+			this.clear();
+			this.set(node);
+		}
+	
+	}).call(Surface);
+	
+	// Allows the rendering of a matter node to a scene. The matter node can be updated
+	// to make corresponding changes to the scene. Changes to the scene are automatic and
+	// no 'flush' method needs to be called on the renderer.
+	function Matter(scene) {
+		this.scene = scene;
+		this.surfaces = new Array(6);
+	}
+	
+	// Define matter renderer functions.
+	(function() {
+	
+		// Clears the node for this matter renderer. After this is called, use 'set'
+		// to set a new node, or ignore the renderer to make it go away.
+		this.prototype.clear = function() {
+			for (var i = 0; i < 6; i++) {
+				for (var j = 0; j < this.surfaces[i].length; j++) {
+					this.surfaces[i][j].clear();
+				}
+				this.surfaces[i] = null;
+			}
+		}
+	
+		// Sets the node to be rendered by this matter renderer. This may only be called
+		// after the renderer is cleared using 'clear', or when it's in its initial state.
+		this.prototype.set = function(node) {
+			for (var axis = 0; axis < 3; axis++) {
+				for (var i = 0; i <= 1; i++) {
+					var flip = (i == 1);
+					var index = axis + (i * 3);
+					var slices = Global.Surface.Slice[axis].all(node, flip);
+					this.surfaces[index] = new Array(slices.length);
+					for (var j = 0; j < slices.length; j++) {
+						var surface = new Surface(this.scene, axis, flip, slices[j].pos);
+						surface.set(slices[j].val);
+						this.surfaces[index][j] = surface;
 					}
 				}
 			}
 		}
-	}
+	
+		// Clears this matter renderer and sets a new node to be rendered.
+		this.prototype.reset = function(node) {
+			this.clear();
+			this.set(node);
+		}
+	
+	}).call(Matter);
 	
 	// Define exports.
 	this.Scene = Scene;
+	this.Surface = Surface;
 	this.Matter = Matter;
 };

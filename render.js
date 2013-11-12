@@ -1,18 +1,17 @@
 
 // Represents an array buffer of fixed-sized items that
 // can accept and remove items between draws.
-function StreamingArrayBuffer(itemSize, maxItemCount) {
-	this.data = new Float32Array(itemSize * maxItemCount);
+function StreamingArrayBuffer(itemSize, initialCapacity) {
+	this.data = new Float32Array(itemSize * initialCapacity);
 	this.source = gl.createBuffer();
-	gl.bindBuffer(gl.ARRAY_BUFFER, this.source);
-	gl.bufferData(gl.ARRAY_BUFFER, this.data, gl.STREAM_DRAW);
-	
-	this.maxItemCount = maxItemCount;
+	this.sourceHasData = false;
+	this.needFlush = true;
 	this.itemSize = itemSize;
-	this.itemState = new Array(maxItemCount);
+	this.itemStates = new Array(initialCapacity);
 	this.nextPossibleFree = 0;
-	for (var i = 0; i < this.itemState.length; i++) {
-		this.itemState[i] = 0;
+	this.drawLength = 0;
+	for (var i = 0; i < this.itemStates.length; i++) {
+		this.itemStates[i] = 0;
 	}
 }
 
@@ -28,11 +27,31 @@ function StreamingArrayBuffer(itemSize, maxItemCount) {
 		Dirty : 2,
 		StatusMask : 2
 	}
+	
+	// Resizes this StreamingArrayBuffer to have the given item capacity. If
+	// this is not enough to contain the current items, the last few items
+	// will be removed. Items will retain their current indices. 'flush' must
+	// be called after 'resize', even if the item data has not changed. 
+	this.prototype.resize = function(capacity) {
+		var nData = new Float32Array(this.itemSize * capacity);
+		for (var i = 0; i < Math.min(this.data.length, nData.length); i++) {
+			nData[i] = this.data[i];
+		}
+		this.data = nData;
+		var oldCapacity = this.itemStates.length;
+		this.itemStates.length = capacity;
+		for (var i = oldCapacity; i < capacity; i++) {
+			this.itemStates[i] = 0;
+		}
+		this.sourceHasData = false;
+		this.needFlush = true;
+	}
 
-	// Finds the next free item index in the buffer.
+	// Finds the next free item index in the buffer, returning -1
+	// if there isn't one available.
 	this.prototype.findFree = function () {
-		for (var i = this.nextPossibleFree; i < this.itemState.length; i++) {
-			var state = this.itemState[i];
+		for (var i = this.nextPossibleFree; i < this.itemStates.length; i++) {
+			var state = this.itemStates[i];
 			if ((state & ItemState.UseMask) == ItemState.Free) {
 				this.nextPossibleFree = i + 1;
 				return i;
@@ -40,24 +59,37 @@ function StreamingArrayBuffer(itemSize, maxItemCount) {
 		}
 		return -1;
 	}
+	
+	// Finds the next free item index in the buffer, expanding it if needed.
+	this.prototype.forceFree = function() {
+		var index = this.findFree();
+		if (index == -1) {
+			index = this.itemStates.length;
+			this.resize(this.itemStates.length * 2);
+			this.nextPossibleFree = index + 1;
+		}
+		return index;
+	}
 
 	// Updates the item at the given index in the buffer, returning
 	// a Float32Array to edit the raw data of the item.
 	this.prototype.edit = function(index) {
 		var start = index * this.itemSize;
-		this.itemState[index] = ItemState.InUse | ItemState.Dirty;
+		this.itemStates[index] = ItemState.InUse | ItemState.Dirty;
+		this.needFlush = true;
 		return this.data.subarray(start, start + this.itemSize);
 	}
 
 	// Removes an item from this buffer.
 	this.prototype.remove = function(index) {
-		if ((this.itemState[index] & ItemState.UseMask) == ItemState.InUse) {
-			this.itemState[index] = ItemState.Free | ItemState.Dirty;
+		if ((this.itemStates[index] & ItemState.UseMask) == ItemState.InUse) {
+			this.itemStates[index] = ItemState.Free | ItemState.Dirty;
 			this.nextPossibleFree = Math.min(this.nextPossibleFree, index);
 			var start = index * this.itemSize;
 			for (var i = 0; i < this.itemSize; i++) {
 				this.data[start + i] = 0.0;
 			}
+			this.needFlush = true;
 		}
 	}
 
@@ -65,51 +97,73 @@ function StreamingArrayBuffer(itemSize, maxItemCount) {
 	// be called some time before the draw call after there was an edit to the items
 	// in the buffer.
 	this.prototype.flush = function() {
+		if (!this.needFlush) return;
+		this.needFlush = false;
 		gl.bindBuffer(gl.ARRAY_BUFFER, this.source);
-		var itemSize = this.itemSize;
-		var data = this.data;
-		var batchCount = 0;
-		function writeBatch(start, end) {
-			gl.bufferSubData(gl.ARRAY_BUFFER, 
-				start * itemSize * 4, data.subarray(
-					start * itemSize,
-					end * itemSize));
-			batchCount++;
-		}
-		var hasBatch = false;
-		var batchStart = 0;
-		var batchEnd = 0;
-		var currentGap = 0;
-		var maxGap = 100;
-		for (var i = 0; i < this.itemState.length; i++) {
-			var state = this.itemState[i];
-			if ((state & ItemState.StatusMask) == ItemState.Dirty) {
-				currentGap = 0;
-				if (hasBatch) {
-					batchEnd = i + 1;
-				} else {
-					hasBatch = true;
-					batchStart = i;
-					batchEnd = i + 1;
+		if (!this.sourceHasData) {
+			gl.bufferData(gl.ARRAY_BUFFER, this.data, gl.STREAM_DRAW);
+			this.sourceHasData = true;
+			for (var i = 0; i < this.itemStates.length; i++) {
+				var state = this.itemStates[i];
+				this.itemStates[i] = (~ItemState.StatusMask & state) | ItemState.Clean;
+			}
+		} else {
+			var itemSize = this.itemSize;
+			var data = this.data;
+			var batchCount = 0;
+			function writeBatch(start, end) {
+				gl.bufferSubData(gl.ARRAY_BUFFER, 
+					start * itemSize * 4, data.subarray(
+						start * itemSize,
+						end * itemSize));
+				batchCount++;
+			}
+			var hasBatch = false;
+			var batchStart = 0;
+			var batchEnd = 0;
+			var currentGap = 0;
+			var maxGap = 100;
+			this.drawLength = 0;
+			for (var i = 0; i < this.itemStates.length; i++) {
+				var state = this.itemStates[i];
+				if ((state & ItemState.UseMask) == ItemState.InUse) {
+					this.drawLength = i + 1;
 				}
-				this.itemState[i] = (~ItemState.StatusMask & state) | ItemState.Clean;
-			} else {
-				if (hasBatch) {
-					currentGap = currentGap + 1;
-					if (currentGap >= maxGap) {
-						writeBatch(batchStart, batchEnd);
-						hasBatch = false;
+				if ((state & ItemState.StatusMask) == ItemState.Dirty) {
+					currentGap = 0;
+					if (hasBatch) {
+						batchEnd = i + 1;
+					} else {
+						hasBatch = true;
+						batchStart = i;
+						batchEnd = i + 1;
+					}
+					this.itemStates[i] = (~ItemState.StatusMask & state) | ItemState.Clean;
+				} else {
+					if (hasBatch) {
+						currentGap = currentGap + 1;
+						if (currentGap >= maxGap) {
+							writeBatch(batchStart, batchEnd);
+							hasBatch = false;
+						}
 					}
 				}
 			}
+			if (hasBatch) writeBatch(batchStart, batchEnd);
 		}
-		if (hasBatch) writeBatch(batchStart, batchEnd);
 	}
 
 	// Binds this StreamingArrayBuffer.
 	this.prototype.bind = function() {
 		gl.bindBuffer(gl.ARRAY_BUFFER, this.source);
 	}
+	
+	// Draws all items in this StreamingArrayBuffer, assuming that
+	// the buffer is already bound.
+	this.prototype.draw = function(mode, vertexSize) {
+		gl.drawArrays(mode, 0, vertexSize * this.drawLength);
+	}
+	
 }).call(StreamingArrayBuffer);
 
 // Contains functions and types for rendering logical objects.
@@ -129,7 +183,7 @@ var Render = new function() {
 		// Gets the buffer in the given scene for the given material.
 		function lookupBuffer(scene, material) {
 			return scene.buffers.lookup(material, function() {
-				return new StreamingArrayBuffer(36, 100000);
+				return new StreamingArrayBuffer(36, 100);
 			});
 		}
 		
@@ -143,7 +197,7 @@ var Render = new function() {
 		// is returned to allow for later removal.
 		this.prototype.push = function(material, a, b, c, d, norm) {
 			var buffer = lookupBuffer(this, material);
-			var index = buffer.findFree();
+			var index = buffer.forceFree();
 			if (index == -1) throw "Buffer Overflow"
 			var data = buffer.edit(index);
 			data[0] = a[0]; data[1] = a[1]; data[2] = a[2];
@@ -183,7 +237,7 @@ var Render = new function() {
 					gl.uniform3f(program.color, mat.r, mat.g, mat.b);
 					gl.vertexAttribPointer(program.pos, 3, gl.FLOAT, false, 6 * 4, 0);
 					gl.vertexAttribPointer(program.norm, 3, gl.FLOAT, false, 6 * 4, 3 * 4);
-					gl.drawArrays(gl.TRIANGLES, 0, 6 * buffer.maxItemCount);
+					buffer.draw(gl.TRIANGLES, 6);
 				}
 			});
 			gl.disableVertexAttribArray(program.pos);

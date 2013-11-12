@@ -33,5 +33,5 @@ var testWorld = (function() {
 	var x7 = Matter.merge(x6, x6, x6, x6, e, e, x4, e);
 	var x8 = Matter.merge(x7, x7, r, x5, e, e, e, e);
 	var x9 = Matter.merge(x8, x8, x8, x8, e, e, e, e);
-	return x5;
+	return x7;
 })();

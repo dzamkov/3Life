@@ -9,6 +9,10 @@ var Surface = new function() {
 	// be rendered in any way.
 	var inside = Node.leaf();
 	
+	// A special value used in delta surfaces. This represents an
+	// area that has not changed from the base surface.
+	var same = Node.leaf();
+	
 	// Gets the leaf node for the given material.
 	function lookup(material) {
 		if (material.node) return material.node;
@@ -20,20 +24,7 @@ var Surface = new function() {
 	
 	// Represents an area that is empty.
 	var empty = lookup(Material.empty);
-	
-	// Determines whether a surface node is visible, that is,
-	// whether it has a non-(inside/empty) leaf.
-	function isVisible(node) {
-		if (node.isLeaf) {
-			return node !== inside && node !== empty;
-		} else {
-			return isVisible(node.children[0]) ||
-				isVisible(node.children[1]) ||
-				isVisible(node.children[2]) ||
-				isVisible(node.children[3]);
-		}
-	}
-	
+
 	// Describes a rectangular rendering primitive that can be used to display
 	// part of a surface. Each Quad has a single material, and a lower and upper
 	// bound on the area it occupies. The lower bound is the smallest rectangle that
@@ -144,6 +135,25 @@ var Surface = new function() {
 		this.inner = inner;
 		this.border = border;
 		this.free = free;
+	}
+	
+	// Updates a surface with a delta surface. This replaces all areas in the base with
+	// the corresponding areas in the delta surface, except for areas that are set to
+	// 'same' in the the delta surface.
+	function update(base, delta) {
+		if (delta.isLeaf) {
+			if (delta === same) {
+				return base;
+			} else {
+				return delta;
+			}
+		} else {
+			var children = new Array(4);
+			for (var i = 0; i < 4; i++) {
+				children[i] = update(base.children[i], delta.children[i]);
+			}
+			return Node.get(children);
+		}
 	}
 	
 	// Define view functions and values.
@@ -296,11 +306,23 @@ var Surface = new function() {
 		var zF = 1 << z;
 		var xF = 1 << x;
 		var yF = 1 << y;
+		
+		// The indices for the children nodes in the first half of a matter node,
+		// where halves are defined by the slice axis.
+		var ni = [0, xF, yF, xF | yF];
+		
+		// The indices for the children nodes in the second half of a matter node,
+		// where halves are defined by the slice axis.
+		var pi = [zF, xF | zF, yF | zF, xF | yF | zF];
 	
 		// Gets the surface between two nodes of matter that are assumed to be adjacent
 		// along the slice axis. The first of nodes will be the "back" of the surface unless
-		// the 'flip' parameter is set.
-		function between(n, p, flip) {
+		// the 'flip' parameter is set. This function can also be used to get the delta surface
+		// between two matter nodes that change as defined in the given boolean volume nodes.
+		function betweenDelta(n, nChange, p, pChange, flip) {
+			if (nChange === Volume.Boolean.false &&
+				pChange === Volume.Boolean.false)
+				return same;
 			if (n.isLeaf && p.isLeaf) {
 				var n = n.material;
 				var p = p.material;
@@ -313,72 +335,75 @@ var Surface = new function() {
 				}
 			} else {
 				var children = new Array(4);
-				children[0] = between(n.children[zF], p.children[0], flip);
-				children[1] = between(n.children[xF | zF], p.children[xF], flip);
-				children[2] = between(n.children[yF | zF], p.children[yF], flip);
-				children[3] = between(n.children[xF | yF | zF], p.children[xF | yF], flip);
+				for (var i = 0; i < 4; i++) {
+					children[i] = betweenDelta(
+						n.children[pi[i]], nChange.children[pi[i]],
+						p.children[ni[i]], pChange.children[ni[i]], flip);
+				}
 				return Node.get(children);
 			}
+		}
+		
+		// Like 'betweenDelta', but returns a non-delta surface.
+		function between(n, p, flip) {
+			return betweenDelta(n, Volume.Boolean.true, p, Volume.Boolean.true, flip);
 		}
 		
 		// Gets a slice of the given matter node along a plane with the given position
 		// relative to the center plane. The position should be within the exclusive
 		// bounds of -0.5 to 0.5. The 'flip' parameter is a boolean that indicates
-		// the direction of the slice when a surface is met.
-		function within(node, pos, flip) {
+		// the direction of the slice when a surface is met. This function can be
+		// used to get a delta surface by specifying which parts of the matter node
+		// have changed in a boolean volume node.
+		function withinDelta(node, change, pos, flip) {
+			if (change === Volume.Boolean.false) return same;
 			if (node.isLeaf) {
 				return node.material.isTransparent ? empty : inside;
 			} else {
 				if (pos == 0.0) {
 					var children = new Array(4);
-					children[0] = between(node.children[0], node.children[zF], flip);
-					children[1] = between(node.children[xF], node.children[xF | zF], flip);
-					children[2] = between(node.children[yF], node.children[yF | zF], flip);
-					children[3] = between(node.children[xF | yF], node.children[xF | yF | zF], flip);
+					for (var i = 0; i < 4; i++) {
+						children[i] = betweenDelta(
+							node.children[ni[i]], change.children[ni[i]],
+							node.children[pi[i]], change.children[pi[i]], flip);
+					}
 					return Node.get(children);
 				} else {
-					var nzF = (pos > 0.0) ? zF : 0;
+					var ki = (pos > 0.0) ? pi : ni;
 					var npos = pos * 2.0 - 1.0;
 					var children = new Array(4);
-					children[0] = within(node.children[nzF], npos, flip);
-					children[1] = within(node.children[xF | nzF], npos, flip);
-					children[2] = within(node.children[yF | nzF], npos, flip);
-					children[3] = within(node.children[xF | yF | nzF], npos, flip);
+					for (var i = 0; i < 4; i++) {
+						children[i] = withinDelta(node.children[ki[i]],
+							change.children[ki[i]], npos, flip);
+					}
 					return Node.get(children);
 				}
 			}
 		}
 		
-		// Gets an ordered array of non-(inside/empty) slices in the given matter node
-		// which completely describe its visual content. The 'flip' parameter is a boolean
-		// that indicates the direction of the slice.
-		function all(node, flip) {
-			if (node.isLeaf) {
+		// Like 'within', but returns a non-delta surface.
+		function within(node, pos, flip) {
+			return withinDelta(node, Volume.Boolean.true, pos, flip);
+		}
+		
+		// Gets an ordered array of changed slices in the given matter node. 
+		// The 'flip' parameter is a boolean that indicates the direction of the slice.
+		// This function can be used to get delta surfaces by specifying which parts of
+		// the matter node have changed in a boolean volume node.
+		function allDelta(node, change, flip) {
+			if (node.isLeaf || change === Volume.Boolean.false) {
 				return [];
 			} else {
-				function compute(node, flip) {
+				function compute(node, change, flip) {
 				
-					// Break the children of node into two groups based on which side of the
-					// center slice plane they are on.
-					var n = [
-						node.children[0],
-						node.children[xF],
-						node.children[yF],
-						node.children[xF | yF]];
-					var p = [
-						node.children[zF],
-						node.children[xF | zF],
-						node.children[yF | zF],
-						node.children[xF | yF | zF]];
-						
-					// Computes the slices within a subset of 4 nodes (like those above) and
-					// pushes them (in order) to the given result array, with the given position
+					// Computes the slices for a half of a given node and pushes
+					// them (in order) to the given result array, with the given position
 					// offset.
-					function withinPart(nodes, flip, res, pos) {
+					function half(node, change, ki, flip, res, pos) {
 						var slices = new Array(4);
 						var counter = new Array(4);
 						for (var i = 0; i < 4; i++) {
-							slices[i] = all(nodes[i], flip);
+							slices[i] = allDelta(node.children[ki[i]], change.children[ki[i]], flip);
 							counter[i] = 0;
 						}
 						
@@ -401,12 +426,11 @@ var Surface = new function() {
 									if (slice.pos == firstPos) {
 										children[i] = slice.val;
 										counter[i]++;
-									} else {
-										children[i] = within(nodes[i], firstPos, flip);
+										continue;
 									}
-								} else {
-									children[i] = within(nodes[i], firstPos, flip);
 								}
+								children[i] = withinDelta(node.children[ki[i]], 
+									change.children[ki[i]], firstPos, flip);
 							}
 							res.push({ 
 								pos : firstPos * 0.5 + pos,
@@ -418,35 +442,32 @@ var Surface = new function() {
 					// Get center slice.
 					var children = new Array(4);
 					for (var i = 0; i < 4; i++) {
-						children[i] = between(n[i], p[i], flip);
+						children[i] = betweenDelta(
+							node.children[ni[i]], change.children[ni[i]], 
+							node.children[pi[i]], change.children[pi[i]], flip);
 					}
 					var center = Node.get(children);
-					if (isVisible(center)) {
-						center = { pos : 0.0, val : center };
-					} else center = null;
 					
 					// Construct result by combining the slices in the first set of children, the
 					// center slice, and the slices from the second set of children.
 					var res = new Array();
-					withinPart(n, flip, res, -0.25);
-					if (center) res.push(center);
-					withinPart(p, flip, res, 0.25);
+					half(node, change, ni, flip, res, -0.25);
+					if (center !== same) res.push({ pos : 0.0, val : center });
+					half(node, change, pi, flip, res, 0.25);
 					return res;
 				}
 				
+				// TODO: Bring back memoization.
 				// Make sure to save and use work we've already done.
-				var index = axis + (flip ? 3 : 0);
-				if (node.slices) {
-					if (node.slices[index]) {
-						return node.slices[index];
-					} else {
-						return node.slices[index] = compute(node, flip);
-					}
-				} else {
-					node.slices = new Array(6);
-					return node.slices[index] = compute(node, flip);
-				}
+				
+				return compute(node, change, flip);
 			}
+		}
+		
+		// Gets an ordered array of all slices in the given matter node. 
+		// The 'flip' parameter is a boolean that indicates the direction of the slice.
+		function all(node, flip) {
+			return allDelta(node, Volume.Boolean.true, flip);
 		}
 		
 		// Projects a vector on a surface into 3D space.
@@ -460,6 +481,9 @@ var Surface = new function() {
 		
 		// Define exports.
 		var Slice = { }
+		Slice.betweenDelta = betweenDelta;
+		Slice.withinDelta = withinDelta;
+		Slice.allDelta = allDelta;
 		Slice.between = between;
 		Slice.within = within;
 		Slice.all = all;
@@ -472,10 +496,13 @@ var Surface = new function() {
 	
 	// Define exports.
 	this.Node = Node;
+	this.get = Node.get;
+	this.merge = Node.merge;
 	this.inside = inside;
 	this.lookup = lookup;
 	this.Quad = Quad;
 	this.View = View;
 	this.view = view;
+	this.update = update;
 	this.Slice = Slice;
 }

@@ -212,6 +212,7 @@ var Render = new function() {
 				this.scene.remove(this.quadRefs[i]);
 			}
 			this.quadRefs = null;
+			this.node = null;
 		}
 	
 		// Sets the node to be rendered by this surface renderer. This may only be called
@@ -237,12 +238,19 @@ var Render = new function() {
 				norm[this.axis] = this.flip ? -1.0 : 1.0;
 				this.quadRefs[i] = scene.push(quad.material, a, b, c, d, norm);
 			}
+			this.node = node;
 		}
 	
 		// Clears this surface renderer and sets a new node to be rendered.
 		this.prototype.reset = function(node) {
 			this.clear();
 			this.set(node);
+		}
+		
+		// Updates the node to be rendered by this renderer using the given delta surface.
+		this.prototype.update = function(delta) {
+			var node = Global.Surface.update(this.node, delta);
+			this.reset(node);
 		}
 	
 	}).call(Surface);
@@ -291,6 +299,45 @@ var Render = new function() {
 		this.prototype.reset = function(node) {
 			this.clear();
 			this.set(node);
+		}
+		
+		// Updates the node to be rendered by this renderer to the given node. A boolean
+		// 'change' node must be supplied to specify what areas of the node have changed
+		// between the last set node. Areas that have not changed can safely be marked as
+		// changed, but not vice versa.
+		this.prototype.update = function(node, change) {
+			for (var axis = 0; axis < 3; axis++) {
+				for (var i = 0; i <= 1; i++) {
+					var flip = (i == 1);
+					var index = axis + (i * 3);
+					var slices = Global.Surface.Slice[axis].allDelta(node, change, flip);
+					var surfaces = this.surfaces[index];
+					var j = 0;
+					var k = 0;
+					while (j < slices.length && k < surfaces.length) {
+						var slice = slices[j];
+						var surface = surfaces[k];
+						if (slice.pos == surface.pos) {
+							surface.update(slice.val);
+							j++; k++;
+						} else if (slice.pos < surface.pos) {
+							var nSurface = new Surface(this.scene, axis, flip, slice.pos);
+							nSurface.set(Global.Surface.update(empty, slice.val));
+							surfaces.splice(k, 0, nSurface);
+							j++; k++;
+						} else if (slice.pos > surface.pos) {
+							k++;
+						}
+					}
+					while (j < slices.length) {
+						var slice = slices[j];
+						var nSurface = new Surface(this.scene, axis, flip, slice.pos);
+						nSurface.set(Global.Surface.update(empty, slice.val));
+						surfaces.push(nSurface);
+						j++;
+					}
+				}
+			}
 		}
 	
 	}).call(Matter);

@@ -307,12 +307,19 @@ function Space(dimension) {
 		return Node;
 	}
 	
+	// A node type whose leaves are boolean values.
+	var Boolean = Node();
+	Boolean.true = Boolean.leaf();
+	Boolean.false = Boolean.leaf();
+	delete Boolean.leaf;
+	
 	// Define module exports.
 	var Space = { };
 	Space.Vector = Vector;
 	Space.Bound = Bound;
 	Space.Permutation = Permutation;
 	Space.Node = Node;
+	Space.Boolean = Boolean;
 	Space.dimension = dimension;
 	Space.vec = Vector.create;
 	return Space;

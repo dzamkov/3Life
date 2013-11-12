@@ -48,6 +48,41 @@ function init() {
 		onRenderFrame();
 		onUpdateFrame(interval);
 	})();
+	
+	var fullUpdate = false;
+	setInterval(function(){
+		function randEdit(node, depth) {
+			if (Math.random() < depth * 0.2 - 0.4) {
+				return {
+					node : [redMatter, greenMatter, blueMatter][
+						Math.floor(Math.random() * 3)],
+					change : Volume.Boolean.true};
+			} else {
+				var i = Math.floor(Math.random() * 8);
+				var mChildren = new Array(8);
+				var cChildren = new Array(8);
+				for (var j = 0; j < 8; j++) {
+					mChildren[j] = node.children[j];
+					cChildren[j] = Volume.Boolean.false;
+				}
+				var res = randEdit(mChildren[i], depth + 1);
+				mChildren[i] = res.node;
+				cChildren[i] = res.change;
+				return {
+					node : Matter.get(mChildren),
+					change : Volume.Boolean.get(cChildren)};
+				Matter.get(children);
+			}
+		}
+		var res = randEdit(node, 0);
+		if (fullUpdate) {
+			renderer.reset(res.node);
+			fullUpdate = false;
+		} else {
+			renderer.update(res.node, res.change);
+		}
+		node = res.node;
+	}, 30);
 }
 
 function onResize() {
@@ -92,30 +127,10 @@ function onRenderFrame() {
 		gl.uniformMatrix4fv(program.proj, false, proj);
         gl.uniformMatrix4fv(program.view, false, view);
 		scene.render();
+		scene.flush();
 	}
 }
 
-var time = 0.0;
 function onUpdateFrame(delta) {
-	time += delta;
-	if (time > 0.3) {
-		function randEdit(node, depth) {
-			if (Math.random() < depth * 0.2 - 0.3) {
-				return [redMatter, greenMatter, blueMatter][
-					Math.floor(Math.random() * 3)];
-			} else {
-				var i = Math.floor(Math.random() * 8);
-				var children = new Array(8);
-				for (var j = 0; j < 8; j++) {
-					children[j] = node.children[j];
-				}
-				children[i] = randEdit(children[i], depth + 1);
-				return Matter.get(children);
-			}
-		}
-		node = randEdit(node, 0);
-		renderer.reset(node);
-		scene.flush();
-		time = 0.0;
-	}
+	
 }

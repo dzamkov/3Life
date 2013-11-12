@@ -369,8 +369,14 @@ var Surface = new function() {
 					}
 					return Node.get(children);
 				} else {
-					var ki = (pos > 0.0) ? pi : ni;
-					var npos = pos * 2.0 - 1.0;
+					var ki, npos;
+					if (pos > 0.0) {
+						ki = pi;
+						npos = pos * 2.0 - 0.5;
+					} else {
+						ki = ni;
+						npos = pos * 2.0 + 0.5;
+					}
 					var children = new Array(4);
 					for (var i = 0; i < 4; i++) {
 						children[i] = withinDelta(node.children[ki[i]],
@@ -386,7 +392,7 @@ var Surface = new function() {
 			return withinDelta(node, Volume.Boolean.true, pos, flip);
 		}
 		
-		// Gets an ordered array of changed slices in the given matter node. 
+		// Gets an ordered array of changed non-empty slices in the given matter node. 
 		// The 'flip' parameter is a boolean that indicates the direction of the slice.
 		// This function can be used to get delta surfaces by specifying which parts of
 		// the matter node have changed in a boolean volume node.

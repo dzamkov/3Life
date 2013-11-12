@@ -98,6 +98,7 @@ function StreamingArrayBuffer(itemSize, initialCapacity) {
 	// in the buffer.
 	this.prototype.flush = function() {
 		if (!this.needFlush) return;
+		this.drawLength = 0;
 		this.needFlush = false;
 		gl.bindBuffer(gl.ARRAY_BUFFER, this.source);
 		if (!this.sourceHasData) {
@@ -105,6 +106,9 @@ function StreamingArrayBuffer(itemSize, initialCapacity) {
 			this.sourceHasData = true;
 			for (var i = 0; i < this.itemStates.length; i++) {
 				var state = this.itemStates[i];
+				if ((state & ItemState.UseMask) == ItemState.InUse) {
+					this.drawLength = i + 1;
+				}
 				this.itemStates[i] = (~ItemState.StatusMask & state) | ItemState.Clean;
 			}
 		} else {
@@ -123,7 +127,6 @@ function StreamingArrayBuffer(itemSize, initialCapacity) {
 			var batchEnd = 0;
 			var currentGap = 0;
 			var maxGap = 100;
-			this.drawLength = 0;
 			for (var i = 0; i < this.itemStates.length; i++) {
 				var state = this.itemStates[i];
 				if ((state & ItemState.UseMask) == ItemState.InUse) {
@@ -198,7 +201,6 @@ var Render = new function() {
 		this.prototype.push = function(material, a, b, c, d, norm) {
 			var buffer = lookupBuffer(this, material);
 			var index = buffer.forceFree();
-			if (index == -1) throw "Buffer Overflow"
 			var data = buffer.edit(index);
 			data[0] = a[0]; data[1] = a[1]; data[2] = a[2];
 			data[6] = b[0]; data[7] = b[1]; data[8] = b[2];
@@ -303,8 +305,12 @@ var Render = new function() {
 		
 		// Updates the node to be rendered by this renderer using the given delta surface.
 		this.prototype.update = function(delta) {
-			var node = Global.Surface.update(this.node, delta);
-			this.reset(node);
+			// TODO: this is really bad method of updating. Need to come up with something clever
+		
+			if (delta !== Surface.same) {
+				var node = Global.Surface.update(this.node, delta);
+				this.reset(node);
+			}
 		}
 	
 	}).call(Surface);
@@ -366,6 +372,14 @@ var Render = new function() {
 					var index = axis + (i * 3);
 					var slices = Global.Surface.Slice[axis].allDelta(node, change, flip);
 					var surfaces = this.surfaces[index];
+					
+					// TODO: THIS IS NOT GOOD CODE. Updating all surfaces, then updating all slices. Lots
+					// of duplicate work. Gotta fix that.
+					
+					for (var j = 0; j < surfaces.length; j++) {
+						surfaces[j].update(Global.Surface.Slice[axis].withinDelta(node, change, surfaces[j].pos, flip));
+					}
+					
 					var j = 0;
 					var k = 0;
 					while (j < slices.length && k < surfaces.length) {

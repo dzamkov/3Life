@@ -54,12 +54,8 @@ function init() {
 		function randEdit(node, depth) {
 			if (Math.random() < depth * 0.2 - 0.4) {
 				return {
-					node : [empty, redMatter, greenMatter, blueMatter][
-						Math.floor(Math.random() * 4)],
-					change : Volume.Boolean.true};
-				/* return {
 					node : empty,
-					change : Volume.Boolean.true}; */
+					change : Volume.Boolean.true};
 			} else {
 				var i = Math.floor(Math.random() * 8);
 				var mChildren = new Array(8);
@@ -85,7 +81,7 @@ function init() {
 			renderer.update(res.node, res.change);
 		}
 		node = res.node;
-	}, 300);
+	}, 3);
 }
 
 function onResize() {

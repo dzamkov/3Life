@@ -249,7 +249,14 @@ function Space(dimension) {
 		// Constructs a node.
 		function _Node(children, isLeaf) {
 			this.children = children;
-			this.isLeaf = isLeaf;
+			this.depth = 0;
+			if (!isLeaf) {
+				this.depth = -1;
+				for (var i = 0; i < children.length; i++) {
+					this.depth = Math.max(this.depth, children[i].depth);
+				}
+				this.depth++;
+			}
 		}
 		
 		// Use a HashMap to store all nodes by their children.
@@ -292,7 +299,7 @@ function Space(dimension) {
 			// with another leaf node.
 			this.prototype.replace = function(from, to) {
 				if (this === from) return to;
-				if (this.isLeaf) return this;
+				if (this.depth == 0) return this;
 				function replaceChild(source) { return source.replace(from, to); };
 				return get(this.children.map(replaceChild));
 			}

@@ -141,7 +141,7 @@ var Surface = new function() {
 	// the corresponding areas in the delta surface, except for areas that are set to
 	// 'same' in the the delta surface.
 	function update(base, delta) {
-		if (delta.isLeaf) {
+		if (delta.depth == 0) {
 			if (delta === same) {
 				return base;
 			} else {
@@ -278,7 +278,7 @@ var Surface = new function() {
 	// Gets the view for a node representing a surface.
 	function view(node) {
 		function compute(node) {
-			if (node.isLeaf) {
+			if (node.depth == 0) {
 				return new View([], [new Quad(node.material, Rect.unit, Rect.unit)], []);
 			} else {
 				var nn = view(node.children[0]).transform(0.5, [-0.25, -0.25]);
@@ -296,6 +296,20 @@ var Surface = new function() {
 	// Define views for special nodes.
 	inside.view = new View([], [], [Rect.unit]);
 	empty.view = new View([], [], []);
+	
+	// Contains arrays of 'same' repeated '2^(i+1)-1' times where 'i' is the array index.
+	var sameArrays = new Array();
+	
+	// Gets an array of 'same' repeated '2^(i+1)-1' times.
+	function getSameArray(i) {
+		if (sameArrays[i]) return sameArrays[i];
+		var array = new Array((2 << i) - 1);
+		for (var j = 0; j < array.length; j++) {
+			array[j] = same;
+		}
+		sameArrays[i] = array;
+		return array;
+	}
 	
 	// Contains functions for slicing (getting a surface for) matter along the given axis.
 	function Slice(axis) {
@@ -323,7 +337,7 @@ var Surface = new function() {
 			if (nChange === Volume.Boolean.false &&
 				pChange === Volume.Boolean.false)
 				return same;
-			if (n.isLeaf && p.isLeaf) {
+			else if (n.depth == 0 && p.depth == 0) {
 				var n = n.material;
 				var p = p.material;
 				if (!flip) {
@@ -356,8 +370,9 @@ var Surface = new function() {
 		// used to get a delta surface by specifying which parts of the matter node
 		// have changed in a boolean volume node.
 		function withinDelta(node, change, pos, flip) {
-			if (change === Volume.Boolean.false) return same;
-			if (node.isLeaf) {
+			if (change === Volume.Boolean.false) {
+				return same;
+			} else if (node.depth == 0) {
 				return node.material.isTransparent ? empty : inside;
 			} else {
 				if (pos == 0.0) {
@@ -392,58 +407,45 @@ var Surface = new function() {
 			return withinDelta(node, Volume.Boolean.true, pos, flip);
 		}
 		
-		// Gets an ordered array of changed non-empty slices in the given matter node. 
-		// The 'flip' parameter is a boolean that indicates the direction of the slice.
-		// This function can be used to get delta surfaces by specifying which parts of
-		// the matter node have changed in a boolean volume node.
+		// Gets an array containing a descriptive set of slices of the given matter node.
+		// For a node of depth 'd', there are '2^(d+1)-1' such slices and the Z position
+		// of the slice at 'i' is '(i+1)/2^(d+1)-1/2'. Odd-indexed will never line up with a
+		// surface on the matter node and thus will always be some combination of 'empty'
+		// and 'inside'. The 'flip' parameter is a boolean that indicates direction of 
+		// the slice. This function can be used to get delta surfaces by specifying 
+		// which parts of the matter node have changed in a boolean volume node.
 		function allDelta(node, change, flip) {
-			if (node.isLeaf || change === Volume.Boolean.false) {
-				return [];
+			if (change === Volume.Boolean.false) {
+				return getSameArray(node.depth);
+			} else if (node.depth == 0) {
+				return node.material.isTransparent ? [empty] : [inside];
 			} else {
 				function compute(node, change, flip) {
-				
-					// Computes the slices for a half of a given node and pushes
-					// them (in order) to the given result array, with the given position
-					// offset.
-					function half(node, change, ki, flip, res, pos) {
-						var slices = new Array(4);
-						var counter = new Array(4);
+					
+					// Computes the slices for a half of the given node and adds them to
+					// the given index of the given array.
+					function half(node, change, ki, flip, res, index, length) {
+						var subSlices = new Array(4);
+						var scaleFactors = new Array(4);
 						for (var i = 0; i < 4; i++) {
-							slices[i] = allDelta(node.children[ki[i]], change.children[ki[i]], flip);
-							counter[i] = 0;
+							subSlices[i] = allDelta(node.children[ki[i]], change.children[ki[i]], flip);
+							scaleFactors[i] = 1 << (node.depth - node.children[ki[i]].depth - 1);
 						}
-						
-						// Merge slices from nodes.
-						while(true) {
-							var firstPos = 0.5;
-							for (var i = 0; i < 4; i++) {
-								if (counter[i] < slices[i].length) {
-									var slice = slices[i][counter[i]];
-									if (slice.pos < firstPos) {
-										firstPos = slice.pos;
-									}
-								}
-							}
-							if (firstPos == 0.5) break;
+						for (var i = 0; i < length; i++) {
 							var children = new Array(4);
-							for (var i = 0; i < 4; i++) {
-								if (counter[i] < slices[i].length) {
-									var slice = slices[i][counter[i]];
-									if (slice.pos == firstPos) {
-										children[i] = slice.val;
-										counter[i]++;
-										continue;
-									}
+							for (var j = 0; j < 4; j++) {
+								var s = scaleFactors[j];
+								if (s == 1) {
+									children[j] = subSlices[j][i];
+								} else {
+									var k = Math.floor(i / s / 2) * 2;
+									if (i - k * s == s * 2 - 1) k++;
+									children[j] = subSlices[j][k];
 								}
-								children[i] = withinDelta(node.children[ki[i]], 
-									change.children[ki[i]], firstPos, flip);
 							}
-							res.push({ 
-								pos : firstPos * 0.5 + pos,
-								val : Node.get(children) });
+							res[index + i] = Node.get(children);
 						}
 					}
-					
 					
 					// Get center slice.
 					var children = new Array(4);
@@ -456,10 +458,11 @@ var Surface = new function() {
 					
 					// Construct result by combining the slices in the first set of children, the
 					// center slice, and the slices from the second set of children.
-					var res = new Array();
-					half(node, change, ni, flip, res, -0.25);
-					if (center !== same) res.push({ pos : 0.0, val : center });
-					half(node, change, pi, flip, res, 0.25);
+					var hLen = (1 << node.depth) - 1;
+					var res = new Array(2 * hLen - 1);
+					half(node, change, ni, flip, res, 0, hLen);
+					res[hLen] = center;
+					half(node, change, pi, flip, res, hLen + 1, hLen);
 					return res;
 				}
 				
@@ -470,12 +473,11 @@ var Surface = new function() {
 			}
 		}
 		
-		// Gets an ordered array of all slices in the given matter node. 
-		// The 'flip' parameter is a boolean that indicates the direction of the slice.
+		// Like 'all', but returns non-delta surfaces.
 		function all(node, flip) {
 			return allDelta(node, Volume.Boolean.true, flip);
 		}
-		
+
 		// Projects a vector on a surface into 3D space.
 		function project(vec, pos) {
 			var res = new Array(3);
@@ -499,6 +501,12 @@ var Surface = new function() {
 	
 	// Create Slice objects.
 	var Slice = [Slice(0), Slice(1), Slice(2)];
+	
+	// Gets the Z position of slice 'i' within the results of 
+	// an 'all' operation on a node of depth 'd'.
+	Slice.pos = function(i, d) {
+		return (i + 1) / (2 << d) - 0.5;
+	}
 	
 	// Define exports.
 	this.Node = Node;

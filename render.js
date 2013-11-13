@@ -345,10 +345,11 @@ var Render = new function() {
 					var flip = (i == 1);
 					var index = axis + (i * 3);
 					var slices = Global.Surface.Slice[axis].all(node, flip);
-					this.surfaces[index] = new Array(slices.length);
-					for (var j = 0; j < slices.length; j++) {
-						var surface = new Surface(this.scene, axis, flip, slices[j].pos);
-						surface.set(slices[j].val);
+					this.surfaces[index] = new Array((slices.length - 1) / 2);
+					for (var j = 0; j < this.surfaces[index].length; j++) {
+						var pos = Global.Surface.Slice.pos(j * 2 + 1, node.depth);
+						var surface = new Surface(this.scene, axis, flip, pos);
+						surface.set(slices[j * 2 + 1]);
 						this.surfaces[index][j] = surface;
 					}
 				}
@@ -371,38 +372,8 @@ var Render = new function() {
 					var flip = (i == 1);
 					var index = axis + (i * 3);
 					var slices = Global.Surface.Slice[axis].allDelta(node, change, flip);
-					var surfaces = this.surfaces[index];
-					
-					// TODO: THIS IS NOT GOOD CODE. Updating all surfaces, then updating all slices. Lots
-					// of duplicate work. Gotta fix that.
-					
-					for (var j = 0; j < surfaces.length; j++) {
-						surfaces[j].update(Global.Surface.Slice[axis].withinDelta(node, change, surfaces[j].pos, flip));
-					}
-					
-					var j = 0;
-					var k = 0;
-					while (j < slices.length && k < surfaces.length) {
-						var slice = slices[j];
-						var surface = surfaces[k];
-						if (slice.pos == surface.pos) {
-							surface.update(slice.val);
-							j++; k++;
-						} else if (slice.pos < surface.pos) {
-							var nSurface = new Surface(this.scene, axis, flip, slice.pos);
-							nSurface.set(Global.Surface.update(empty, slice.val));
-							surfaces.splice(k, 0, nSurface);
-							j++; k++;
-						} else if (slice.pos > surface.pos) {
-							k++;
-						}
-					}
-					while (j < slices.length) {
-						var slice = slices[j];
-						var nSurface = new Surface(this.scene, axis, flip, slice.pos);
-						nSurface.set(Global.Surface.update(empty, slice.val));
-						surfaces.push(nSurface);
-						j++;
+					for (var j = 0; j < this.surfaces[index].length; j++) {
+						this.surfaces[index][j].update(slices[j * 2 + 1]);
 					}
 				}
 			}

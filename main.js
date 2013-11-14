@@ -165,12 +165,14 @@ function onUpdateFrame(delta) {
 	if (keyState[39] || keyState[68]) vec3.subtract(eyePos, vec3.scale(eyeLeft, move));
 	if (keyState[38] || keyState[87]) vec3.add(eyePos, vec3.scale(eyeDir, move));
 	if (keyState[40] || keyState[83]) vec3.subtract(eyePos, vec3.scale(eyeDir, move));
-	var near = Matter.near(node, 1.0, [0.0, 0.0, 0.0], eyePos);
-	if (near.dis < minDis) {
-		var Vector = Volume.Vector;
-		vec3.add(eyePos, Vector.scale(near.norm, minDis - near.dis));
-		lastDis = minDis;
-	} else {
+	for (var i = 0; i < 3; i++) {
+		var near = Matter.nearTransformed(node, 1.0, [0.0, 0.0, 0.0], eyePos);
 		lastDis = near.dis;
+		if (near.dis < minDis) {
+			var Vector = Volume.Vector;
+			vec3.add(eyePos, Vector.scale(near.norm, minDis - near.dis));
+		} else break;
 	}
+	
+	
 }

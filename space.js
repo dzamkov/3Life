@@ -280,7 +280,7 @@ function Space(dimension) {
 		function inverse(p) {
 			return p.inverse;
 		}
-		
+
 		// Create names for permutations.
 		for (var i = 0; i < perms.length; i++) {
 			var p = perms[i];

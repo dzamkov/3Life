@@ -29,104 +29,150 @@ var Matter = new function() {
 		[-0.25, 0.25, 0.25],
 		[0.25, 0.25, 0.25]];
 	
+	// Gets the permutation that sorts the components of the given vector.
+	Permutation.sort = function(vec) {
+		if (vec[0] < vec[1]) {
+			if (vec[1] < vec[2]) {
+				return Permutation.xyz;
+			} else {
+				if (vec[0] < vec[2]) {
+					return Permutation.xzy;
+				} else {
+					return Permutation.zxy;
+				}
+			}
+		} else {
+			if (vec[0] < vec[2]) {
+				return Permutation.yxz;
+			} else {
+				if (vec[1] < vec[2]) {
+					return Permutation.yzx;
+				} else {
+					return Permutation.zyx;
+				}
+			}
+		}
+	}
+	
 	// Gets the surface point in the given node that is nearest to the
 	// given position. Also returns the normal at that point, and the
 	// signed distance to the point. Returns null if the node is completely empty. 
-	// This function assumes that the node occupies a cubic area described by the
-	// given size and edge length.
-	function near(node, size, center, pos) {
+	// This function assumes that the node occupies the cubic area described by
+	// 'Volume.Bound.unit'.
+	function near(node, pos) {
 		if (node.depth == 0) {
 			if (node === empty) {
 				return null;
 			} else {
-				var hsize = size * 0.5;
-				var dif = Vector.sub(pos, center);
-				var abs = Vector.abs(dif);
+				var abs = Vector.abs(pos);
 				
 				// Find the permutation thats sorts the components of 'abs'.
-				var perm;
-				if (abs[0] < abs[1]) {
-					if (abs[1] < abs[2]) {
-						perm = Permutation.xyz;
-					} else {
-						if (abs[0] < abs[2]) {
-							perm = Permutation.xzy;
-						} else {
-							perm = Permutation.zxy;
-						}
-					}
-				} else {
-					if (abs[0] < abs[2]) {
-						perm = Permutation.yxz;
-					} else {
-						if (abs[1] < abs[2]) {
-							perm = Permutation.yzx;
-						} else {
-							perm = Permutation.zyx;
-						}
-					}
-				}
+				var perm = Permutation.sort(abs);
 				
 				// Apply that permutation and see what we get.
 				abs = Permutation.apply(perm, abs);
-				if (abs[1] < hsize) {
+				if (abs[1] < 0.5) {
 				
 					// Nearest to a face.
-					var dis = abs[2] - hsize;
-					var point = Vector.copy(dif);
+					var dis = abs[2] - 0.5;
+					var point = Vector.copy(pos);
 					var norm = Vector.copy(Vector.zero);
 					if (point[perm[2]] > 0.0) {
-						point[perm[2]] = hsize;
+						point[perm[2]] = 0.5;
 						norm[perm[2]] = 1.0;
 					} else {
-						point[perm[2]] = -hsize;
+						point[perm[2]] = -0.5;
 						norm[perm[2]] = -1.0;
 					}
-					point = Vector.add(point, center);
 					return { dis : dis, point : point, norm : norm };
-				} else if (abs[0] < hsize) {
+				} else if (abs[0] < 0.5) {
 				
 					// Nearest to an edge.
-					abs[1] -= hsize;
-					abs[2] -= hsize;
+					abs[1] -= 0.5;
+					abs[2] -= 0.5;
 					var dis = Math.sqrt(abs[1] * abs[1] + abs[2] * abs[2]);
-					var point = Vector.copy(dif);
-					point[perm[1]] = (point[perm[1]] > 0.0) ? hsize : -hsize;
-					point[perm[2]] = (point[perm[2]] > 0.0) ? hsize : -hsize;
-					var norm = Vector.scale(Vector.sub(dif, point), 1.0 / dis);
-					point = Vector.add(point, center);
+					var point = Vector.copy(pos);
+					point[perm[1]] = (point[perm[1]] > 0.0) ? 0.5 : -0.5;
+					point[perm[2]] = (point[perm[2]] > 0.0) ? 0.5 : -0.5;
+					var norm = Vector.scale(Vector.sub(pos, point), 1.0 / dis);
 					return { dis : dis, point : point, norm : norm };
 				} else {
 				
 					// Nearest to a corner.
-					abs[0] -= hsize;
-					abs[1] -= hsize;
-					abs[2] -= hsize;
+					abs[0] -= 0.5;
+					abs[1] -= 0.5;
+					abs[2] -= 0.5;
 					var dis = Vector.length(abs);
-					var point = Vector.copy(dif);
-					point[0] = (point[0] > 0.0) ? hsize : -hsize;
-					point[1] = (point[1] > 0.0) ? hsize : -hsize;
-					point[2] = (point[2] > 0.0) ? hsize : -hsize;
-					var norm = Vector.scale(Vector.sub(dif, point), 1.0 / dis);
-					point = Vector.add(point, center);
+					var point = Vector.copy(pos);
+					point[0] = (point[0] > 0.0) ? 0.5 : -0.5;
+					point[1] = (point[1] > 0.0) ? 0.5 : -0.5;
+					point[2] = (point[2] > 0.0) ? 0.5 : -0.5;
+					var norm = Vector.scale(Vector.sub(pos, point), 1.0 / dis);
 					return { dis : dis, point : point, norm : norm };
 				}
 			}
 		} else {
-		
-			// TODO: Optimize
-			var best = null;
-			for (var i = 0; i < 8; i++) {
-				var cur = near(node.children[i], size * 0.5,
-					Vector.add(center, Vector.scale(offsets[i], size)), pos);
-				if (cur !== null) {
-					if (best === null || cur.dis < best.dis) {
-						best = cur;
+			// Returns the result with the smaller distance.
+			function minDis(a, b) {
+				if (b !== null) {
+					if (a === null || b.dis < a.dis) {
+						return b;
 					}
 				}
+				return a;
 			}
+		
+			// Finds the nearest point to a child of the given node.
+			function nearChild(node, index, pos) {
+				var nPos = Vector.scale(Vector.sub(pos, offsets[index]), 2.0);
+				var res = near(node.children[index], nPos);
+				if (res !== null) {
+					res.dis *= 0.5;
+					res.point = Vector.add(Vector.scale(res.point, 0.5), offsets[index]);
+				}
+				return res;
+			}
+			
+			var abs = Vector.abs(pos);
+			var perm = Permutation.sort(abs);
+			abs = Permutation.apply(perm, abs);
+			
+			var x = (pos[0] > 0.0) ? 1 : 0;
+			var y = (pos[1] > 0.0) ? 2 : 0;
+			var z = (pos[2] > 0.0) ? 4 : 0;
+			var i = x | y | z;
+			
+			var best = nearChild(node, i, pos);
+			if (best !== null && best.dis < abs[0]) return best;
+			
+			var f0 = 1 << perm[0];
+			best = minDis(best, nearChild(node, i ^ f0, pos));
+			if (best !== null && best.dis < abs[1]) return best;
+			
+			var f1 = 1 << perm[1];
+			best = minDis(best, nearChild(node, i ^ f1, pos));
+			best = minDis(best, nearChild(node, i ^ f1 ^ f0, pos));
+			if (best !== null && best.dis < abs[2]) return best;
+			
+			var f2 = 1 << perm[2];
+			best = minDis(best, nearChild(node, i ^ f2, pos));
+			best = minDis(best, nearChild(node, i ^ f2 ^ f0, pos));
+			best = minDis(best, nearChild(node, i ^ f2 ^ f1, pos));
+			best = minDis(best, nearChild(node, i ^ f2 ^ f1 ^ f0, pos));
 			return best;
 		}
+	}
+	
+	// Like 'near', but allows the position and size (edge-length) of the
+	// node to be chosen.
+	function nearTransformed(node, size, center, pos) {
+		var nPos = Vector.scale(Vector.sub(pos, center), 1.0 / size);
+		var res = near(node, nPos);
+		if (res !== null) {
+			res.dis *= size;
+			res.point = Vector.add(Vector.scale(res.point, size), center);
+		}
+		return res;
 	}
 	
 	// A test configuration of matter.
@@ -156,4 +202,5 @@ var Matter = new function() {
 	this.create = create;
 	this.empty = empty;
 	this.near = near;
+	this.nearTransformed = nearTransformed;
 }

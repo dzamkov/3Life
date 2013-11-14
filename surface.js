@@ -297,20 +297,6 @@ var Surface = new function() {
 	inside.view = new View([], [], [Rect.unit]);
 	empty.view = new View([], [], []);
 	
-	// Contains arrays of 'same' repeated '2^(i+1)-1' times where 'i' is the array index.
-	var sameArrays = new Array();
-	
-	// Gets an array of 'same' repeated '2^(i+1)-1' times.
-	function getSameArray(i) {
-		if (sameArrays[i]) return sameArrays[i];
-		var array = new Array((2 << i) - 1);
-		for (var j = 0; j < array.length; j++) {
-			array[j] = same;
-		}
-		sameArrays[i] = array;
-		return array;
-	}
-	
 	// Contains functions for slicing (getting a surface for) matter along the given axis.
 	function Slice(axis) {
 		var z = axis;
@@ -407,75 +393,122 @@ var Surface = new function() {
 			return withinDelta(node, Volume.Boolean.true, pos, flip);
 		}
 		
-		// Gets an array containing a descriptive set of slices of the given matter node.
-		// For a node of depth 'd', there are '2^(d+1)-1' such slices and the Z position
-		// of the slice at 'i' is '(i+1)/2^(d+1)-1/2'. Odd-indexed will never line up with a
-		// surface on the matter node and thus will always be some combination of 'empty'
-		// and 'inside'. The 'flip' parameter is a boolean that indicates direction of 
-		// the slice. This function can be used to get delta surfaces by specifying 
-		// which parts of the matter node have changed in a boolean volume node.
-		function allDelta(node, change, flip) {
+		// Gets a complete description of the slices in the given matter node, the result
+		// of which can be used to compute any 'withinDelta' slice. This function can be used
+		// to get delta surfaces by specifying which parts of the matter node have changed
+		// in a boolean volume node.
+		function allDelta(node, change) {
+			
+			// Note: The structure of the objects returned is as follows:
+			// { head : Node, tail : [{ pos : Number, at : [Node, Node], after : Node }] }
+			
+			// 'head' specifies the slice that appears at positions near -0.5.
+			// 'tail' specifies all "discontinuities" in the following slice.
+			// 'pos' specifies the position of a discontinuity.
+			// 'at' specifies the slices (one for each 'flip' value) that appear at the discontinuity.
+			// 'after' specifies the slices directly following the discontinuity.
+		
 			if (change === Volume.Boolean.false) {
-				return getSameArray(node.depth);
+				return { head : same, tail : [] };
 			} else if (node.depth == 0) {
-				return node.material.isTransparent ? [empty] : [inside];
+				var head = node.material.isTransparent ? empty : inside;
+				return { head : head, tail : [] };
 			} else {
-				function compute(node, change, flip) {
+				function compute(node, change) {
 					
-					// Computes the slices for a half of the given node and adds them to
-					// the given index of the given array.
-					function half(node, change, ki, flip, res, index, length) {
-						var subSlices = new Array(4);
-						var scaleFactors = new Array(4);
+					// Computes the slices for a half of the given node and pushes
+					// them to the given tail array. Returns the head of the slices.
+					function half(node, change, ki, offset, tail) {
+						var tails = new Array(4);
+						var counter = new Array(4);
+						var current = new Array(4);
+						var children = new Array(4);
 						for (var i = 0; i < 4; i++) {
-							subSlices[i] = allDelta(node.children[ki[i]], change.children[ki[i]], flip);
-							scaleFactors[i] = 1 << (node.depth - node.children[ki[i]].depth - 1);
+							var sub = allDelta(node.children[ki[i]], change.children[ki[i]]);
+							tails[i] = sub.tail;
+							counter[i] = 0;
+							current[i] = children[i] = sub.head;
 						}
-						for (var i = 0; i < length; i++) {
-							var children = new Array(4);
-							for (var j = 0; j < 4; j++) {
-								var s = scaleFactors[j];
-								if (s == 1) {
-									children[j] = subSlices[j][i];
-								} else {
-									var k = Math.floor(i / s / 2) * 2;
-									if (i - k * s == s * 2 - 1) k++;
-									children[j] = subSlices[j][k];
+						var head = Node.get(children);
+						while (true) {
+						
+							// Find the first place with a discontinuity.
+							var firstPos = 0.5;
+							for (var i = 0; i < 4; i++) {
+								if (counter[i] < tails[i].length) {
+									firstPos = Math.min(firstPos, tails[i][counter[i]].pos);
 								}
 							}
-							res[index + i] = Node.get(children);
+							if (firstPos == 0.5) break;
+							
+							// Determine the full slices at that discontinuity.
+							var atChildren = [new Array(4), new Array(4)];
+							var afterChildren = new Array(4);
+							for (var i = 0; i < 4; i++) {
+								var dis = tails[i][counter[i]];
+								if (dis && dis.pos == firstPos) {
+									atChildren[0][i] = dis.at[0];
+									atChildren[1][i] = dis.at[1];
+									afterChildren[i] = dis.after;
+									current[i] = dis.after;
+									counter[i]++;
+								} else {
+									atChildren[0][i] = current[i];
+									atChildren[1][i] = current[i];
+									afterChildren[i] = current[i];
+								}
+							}
+							
+							// Push the discontinuity.
+							tail.push({
+								pos : firstPos * 0.5 + offset,
+								at : [Node.get(atChildren[0]), Node.get(atChildren[1])],
+								after : Node.get(afterChildren)});
+						}
+						
+						// Return the head.
+						return head;
+					}
+					
+					// Get center 'at' slices.
+					var atChildren = [new Array(4), new Array(4)];
+					for (var i = 0; i <= 1; i++) {
+						for (var j = 0; j < 4; j++) {
+							atChildren[i][j] = betweenDelta(
+								node.children[ni[j]], change.children[ni[j]], 
+								node.children[pi[j]], change.children[pi[j]], i == 1);
 						}
 					}
+					var centerAt = [Node.get(atChildren[0]), Node.get(atChildren[1])];
+					var center = { pos : 0.0, at : centerAt };
 					
-					// Get center slice.
-					var children = new Array(4);
-					for (var i = 0; i < 4; i++) {
-						children[i] = betweenDelta(
-							node.children[ni[i]], change.children[ni[i]], 
-							node.children[pi[i]], change.children[pi[i]], flip);
+					// Construct result by combining the results from the first set of children, the
+					// center slice, and the results from the second set of children.
+					var tail = new Array();
+					var nHead = half(node, change, ni, -0.25, tail);
+					var centerIndex = tail.length;
+					tail.push(center);
+					var pHead = center.after = half(node, change, pi, 0.25, tail);
+					
+					// Remove center if it is not a discontinuity.
+					if (centerAt[0] === centerAt[1] && centerAt[0] === pHead) {
+						var before = (centerIndex == 0) ? nHead : tail[centerIndex - 1].after;
+						if (before === centerAt[0]) {
+							tail.splice(centerIndex, 1);
+						}
 					}
-					var center = Node.get(children);
-					
-					// Construct result by combining the slices in the first set of children, the
-					// center slice, and the slices from the second set of children.
-					var hLen = (1 << node.depth) - 1;
-					var res = new Array(2 * hLen - 1);
-					half(node, change, ni, flip, res, 0, hLen);
-					res[hLen] = center;
-					half(node, change, pi, flip, res, hLen + 1, hLen);
-					return res;
+					return { head : nHead, tail : tail };
 				}
 				
 				// TODO: Bring back memoization.
 				// Make sure to save and use work we've already done.
-				
-				return compute(node, change, flip);
+				return compute(node, change);
 			}
 		}
 		
 		// Like 'all', but returns non-delta surfaces.
-		function all(node, flip) {
-			return allDelta(node, Volume.Boolean.true, flip);
+		function all(node) {
+			return allDelta(node, Volume.Boolean.true);
 		}
 
 		// Projects a vector on a surface into 3D space.
@@ -513,6 +546,8 @@ var Surface = new function() {
 	this.get = Node.get;
 	this.merge = Node.merge;
 	this.inside = inside;
+	this.same = same;
+	this.empty = empty;
 	this.lookup = lookup;
 	this.Quad = Quad;
 	this.View = View;

@@ -307,7 +307,7 @@ var Render = new function() {
 		this.prototype.update = function(delta) {
 			// TODO: this is really bad method of updating. Need to come up with something clever
 		
-			if (delta !== Surface.same) {
+			if (delta !== Global.Surface.same) {
 				var node = Global.Surface.update(this.node, delta);
 				this.reset(node);
 			}
@@ -320,7 +320,7 @@ var Render = new function() {
 	// no 'flush' method needs to be called on the renderer.
 	function Matter(scene) {
 		this.scene = scene;
-		this.surfaces = new Array(6);
+		this.surfaces = new Array(3);
 	}
 	
 	// Define matter renderer functions.
@@ -329,9 +329,11 @@ var Render = new function() {
 		// Clears the node for this matter renderer. After this is called, use 'set'
 		// to set a new node, or ignore the renderer to make it go away.
 		this.prototype.clear = function() {
-			for (var i = 0; i < 6; i++) {
+			for (var i = 0; i < 3; i++) {
 				for (var j = 0; j < this.surfaces[i].length; j++) {
-					this.surfaces[i][j].clear();
+					for (var k = 0; k <= 1; k++) {
+						this.surfaces[i][j][k].clear();
+					}
 				}
 				this.surfaces[i] = null;
 			}
@@ -341,16 +343,15 @@ var Render = new function() {
 		// after the renderer is cleared using 'clear', or when it's in its initial state.
 		this.prototype.set = function(node) {
 			for (var axis = 0; axis < 3; axis++) {
-				for (var i = 0; i <= 1; i++) {
-					var flip = (i == 1);
-					var index = axis + (i * 3);
-					var slices = Global.Surface.Slice[axis].all(node, flip);
-					this.surfaces[index] = new Array((slices.length - 1) / 2);
-					for (var j = 0; j < this.surfaces[index].length; j++) {
-						var pos = Global.Surface.Slice.pos(j * 2 + 1, node.depth);
-						var surface = new Surface(this.scene, axis, flip, pos);
-						surface.set(slices[j * 2 + 1]);
-						this.surfaces[index][j] = surface;
+				var slices = Global.Surface.Slice[axis].all(node).tail;
+				this.surfaces[axis] = new Array(slices.length);
+				for (var i = 0; i < slices.length; i++) {
+					var slice = slices[i];
+					var surfaces = this.surfaces[axis][i] = new Array(2);
+					for (var j = 0; j <= 1; j++) {
+						var flip = (j == 1);
+						var surface = surfaces[j] = new Surface(this.scene, axis, flip, slice.pos);
+						surface.set(slice.at[j]);
 					}
 				}
 			}
@@ -368,13 +369,52 @@ var Render = new function() {
 		// changed, but not vice versa.
 		this.prototype.update = function(node, change) {
 			for (var axis = 0; axis < 3; axis++) {
-				for (var i = 0; i <= 1; i++) {
-					var flip = (i == 1);
-					var index = axis + (i * 3);
-					var slices = Global.Surface.Slice[axis].allDelta(node, change, flip);
-					for (var j = 0; j < this.surfaces[index].length; j++) {
-						this.surfaces[index][j].update(slices[j * 2 + 1]);
+				var surfaces = this.surfaces[axis];
+				var all = Global.Surface.Slice[axis].allDelta(node, change);
+				var current = all.head;
+				var slices = all.tail;
+				var i = 0;
+				var j = 0;
+				while (i < slices.length && j < surfaces.length) {
+					var iPos = slices[i].pos;
+					var jPos = surfaces[j][0].pos;
+					if (iPos == jPos) {
+						for (var k = 0; k <= 1; k++) {
+							surfaces[j][k].update(slices[i].at[k]);
+						}
+						current = slices[i].after;
+						i++; j++;
+					} else if (iPos < jPos) {
+						this.surfaces[axis].splice(j, 0, new Array(2));
+						for (var k = 0; k <= 1; k++) {
+							var flip = (k == 1);
+							var surface = surfaces[j][k] = new Surface(this.scene, axis, flip, iPos);
+							surface.set(slices[i].at[k]);
+						}
+						current = slices[i].after;
+						i++; j++;
+					} else {
+						for (var k = 0; k <= 1; k++) {
+							surfaces[j][k].update(current);
+						}
+						j++;
 					}
+				}
+				while (i < slices.length) {
+					var nSurfaces = new Array(2);
+					for (var k = 0; k <= 1; k++) {
+						var flip = (k == 1);
+						var surface = nSurfaces[k] = new Surface(this.scene, axis, flip, iPos);
+						surface.set(slices[i].at[k]);
+					}
+					this.surfaces[axis].push(nSurfaces);
+					i++;
+				}
+				while (j < surfaces.length) {
+					for (var k = 0; k <= 1; k++) {
+						surfaces[j][k].update(current);
+					}
+					j++;
 				}
 			}
 		}

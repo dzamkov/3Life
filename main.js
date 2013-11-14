@@ -44,15 +44,14 @@ function init() {
 			elapsedTime -= 1.0;
 			elapsedFrames = 0;
 		}
-		requestAnimationFrame(animate);
 		onRenderFrame();
 		onUpdateFrame(interval);
+		requestAnimationFrame(animate);
 	})();
 	
-	var fullUpdate = false;
-	setInterval(function(){
+	setInterval(function() {
 		function randEdit(node, depth) {
-			if (Math.random() < depth * 0.2 - 0.4) {
+			if (Math.random() < depth * 0.3 - 0.8) {
 				return {
 					node : empty,
 					change : Volume.Boolean.true};
@@ -74,14 +73,9 @@ function init() {
 			}
 		}
 		var res = randEdit(node, 0);
-		if (fullUpdate) {
-			renderer.reset(res.node);
-			fullUpdate = false;
-		} else {
-			renderer.update(res.node, res.change);
-		}
+		renderer.update(res.node, res.change);
 		node = res.node;
-	}, 3);
+	}, 30);
 }
 
 function onResize() {

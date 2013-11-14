@@ -26,8 +26,19 @@ function init() {
 	
 	onResize();
 	window.addEventListener('resize', onResize, false);
+	window.addEventListener('keyup', onKeyUp, false);
+	window.addEventListener('keydown', onKeyDown, false);
 	canvas.addEventListener('mousemove', onMouseMove, false);
+	canvas.addEventListener('mousedown', onMouseDown, false);
 	canvas.addEventListener('mousewheel', onMouseWheel, false);
+	
+	canvas.requestPointerLock = canvas.requestPointerLock ||
+		canvas.mozRequestPointerLock ||
+		canvas.webkitRequestPointerLock;
+	
+	canvas.requestFullScreen = canvas.requestFullScreen ||
+		canvas.webkitRequestFullScreen || 
+		canvas.mozRequestFullScreen;
 	
 	var lastTime = new Date().getTime();
 	var elapsedTime = 0.0;
@@ -84,11 +95,29 @@ function onResize() {
 	gl.viewport(0, 0, canvas.width, canvas.height);
 }
 
-var x = 0;
-var y = 0;
 function onMouseMove(event) {
-	x = event.clientX;
-	y = event.clientY;
+	if (document.webkitPointerLockElement === canvas) {
+		var x = event.movementX || event.webkitMovementX;
+		var y = event.movementY || event.webkitMovementY;
+		x *= 0.01;
+		y *= 0.01;
+		eyeYaw = eyeYaw - x;
+		eyePitch = Math.max(Math.PI * -0.4, Math.min(Math.PI * 0.4, eyePitch - y));
+	}
+}
+
+function onMouseDown() {
+	canvas.requestFullScreen(canvas.ALLOW_KEYBOARD_INPUT);
+	canvas.requestPointerLock();
+}
+
+var keyState = new Array();
+function onKeyDown(event) {
+	keyState[event.keyCode] = true;
+}
+
+function onKeyUp(event) {
+	keyState[event.keyCode] = false;
 }
 
 var zoom = 0.0;
@@ -97,7 +126,11 @@ function onMouseWheel(event) {
 	zoom = Math.min(0.5, Math.max(-0.5, zoom));
 }
 
+var eyePos = [0, 0, 0];
+var eyeYaw = 0.0;
+var eyePitch = 0.0;
 function onRenderFrame() {
+	gl.clearColor(0.0, 0.0, 0.0, 1.0);
 	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 	if (program) {
 		gl.useProgram(program);
@@ -106,16 +139,11 @@ function onRenderFrame() {
 		mat4.perspective(45, canvas.width / canvas.height, 0.01, 10.0, proj);
 		
 		var view = mat4.create();
-		var mx = 1.0 - x / canvas.width * 2.0;
-		var my = y / canvas.height * 2.0 - 1.0;
-		mx *= 2.5;
-		my *= 1.5;
-		var d = Math.exp(zoom * 5.0);
-		mat4.lookAt([
-			d * Math.cos(mx) * Math.cos(my),
-			d * Math.sin(mx) * Math.cos(my),
-			d * Math.sin(my) - 0.5],
-			[0, 0, -0.5], [0, 0, 1], view);
+		var eyeDir = vec3.create([
+			Math.cos(eyeYaw) * Math.cos(eyePitch),
+			Math.sin(eyeYaw) * Math.cos(eyePitch),
+			Math.sin(eyePitch)]);
+		mat4.lookAt(eyePos, vec3.add(vec3.create(eyePos), eyeDir), [0, 0, 1], view);
 		
 		gl.uniformMatrix4fv(program.proj, false, proj);
         gl.uniformMatrix4fv(program.view, false, view);
@@ -125,5 +153,14 @@ function onRenderFrame() {
 }
 
 function onUpdateFrame(delta) {
-	
+	var eyeDir = vec3.create([
+		Math.cos(eyeYaw) * Math.cos(eyePitch),
+		Math.sin(eyeYaw) * Math.cos(eyePitch),
+		Math.sin(eyePitch)]);
+	var eyeLeft = vec3.cross([0, 0, 1], eyeDir);
+	var move = 0.1 * delta;
+	if (keyState[37] || keyState[65]) vec3.add(eyePos, vec3.scale(eyeLeft, move));
+	if (keyState[39] || keyState[68]) vec3.subtract(eyePos, vec3.scale(eyeLeft, move));
+	if (keyState[38] || keyState[87]) vec3.add(eyePos, vec3.scale(eyeDir, move));
+	if (keyState[40] || keyState[83]) vec3.subtract(eyePos, vec3.scale(eyeDir, move));
 }

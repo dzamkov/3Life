@@ -404,7 +404,7 @@ var Render = new function() {
 					var nSurfaces = new Array(2);
 					for (var k = 0; k <= 1; k++) {
 						var flip = (k == 1);
-						var surface = nSurfaces[k] = new Surface(this.scene, axis, flip, iPos);
+						var surface = nSurfaces[k] = new Surface(this.scene, axis, flip, slices[i].pos);
 						surface.set(slices[i].at[k]);
 					}
 					this.surfaces[axis].push(nSurfaces);

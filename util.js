@@ -210,7 +210,7 @@ function HashMap(initialCapacity) {
 	// Looks up the value for an item in this HashMap, or creates it
 	// using the given function if it does not already exist.
 	this.prototype.lookup = function(key, create) {
-		var index = Equality.hash(key).mod(this.buckets.length);
+		var index = Math.abs(Equality.hash(key) % this.buckets.length);
 		while (true) {
 			if (this.buckets[index] === null) {
 				var value = create(key);
@@ -229,7 +229,7 @@ function HashMap(initialCapacity) {
 
 	// Updates the value for an item in this HashMap.
 	this.prototype.set = function(key, value) {
-		var index = Equality.hash(key).mod(this.buckets.length);
+		var index = Math.abs(Equality.hash(key) % this.buckets.length);
 		while (true) {
 			if (this.buckets[index] === null) {
 				this.buckets[index] = new Bucket(key, value);
@@ -249,7 +249,7 @@ function HashMap(initialCapacity) {
 	// Gets the value for an item in this HashMap, or returns null if the item
 	// is not in the HashMap.
 	this.prototype.get = function(key) {
-		var index = Equality.hash(key).mod(this.buckets.length);
+		var index = Math.abs(Equality.hash(key) % this.buckets.length);
 		while (this.buckets[index] !== null) {
 			if (Equality.equals(key, this.buckets[index])) {
 				return this.buckets[index].value;
@@ -274,7 +274,7 @@ function HashMap(initialCapacity) {
 	// with the same key is already in it and that the HashMap already has the
 	// right capacity.
 	function insert(map, bucket) {
-		var index = Equality.hash(bucket.key).mod(map.buckets.length);
+		var index = Math.abs(Equality.hash(bucket.key) % map.buckets.length);
 		while (map.buckets[index] !== null) {
 			index = (index + 1) % map.buckets.length;
 		}

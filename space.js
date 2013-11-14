@@ -19,10 +19,70 @@ function Space(dimension) {
 		function create() {
 			return arguments;
 		}
+		
+		// Creates a copy of the given vector.
+		function copy(vec) {
+			var res = new Array(dimension);
+			for (var i = 0; i < dimension; i++) {
+				res[i] = vec[i];
+			}
+			return res;
+		}
+		
+		// Non-destructively adds two vectors.
+		function add(a, b) {
+			var res = new Array(dimension);
+			for (var i = 0; i < dimension; i++) {
+				res[i] = a[i] + b[i];
+			}
+			return res;
+		}
+		
+		// Non-destructively subtracts a vector from another.
+		function sub(a, b) {
+			var res = new Array(dimension);
+			for (var i = 0; i < dimension; i++) {
+				res[i] = a[i] - b[i];
+			}
+			return res;
+		}
+		
+		// Non-destructively scales a vector by a given amount.
+		function scale(vec, amt) {
+			var res = new Array(dimension);
+			for (var i = 0; i < dimension; i++) {
+				res[i] = vec[i] * amt;
+			}
+			return res;
+		}
+		
+		// Computes the absolute values of all components of a vector.
+		function abs(vec) {
+			var res = new Array(dimension);
+			for (var i = 0; i < dimension; i++) {
+				res[i] = Math.abs(vec[i]);
+			}
+			return res;
+		}
+		
+		// Computes the length of a vector.
+		function length(vec) {
+			var len = 0;
+			for (var i = 0; i < dimension; i++) {
+				len += vec[i] * vec[i];
+			}
+			return Math.sqrt(len);
+		}
 	
 		// Define exports.
 		this.zero = zero;
 		this.create = create;
+		this.copy = copy;
+		this.add = add;
+		this.sub = sub;
+		this.abs = abs;
+		this.scale = scale;
+		this.length = length;
 	}
 	
 	// Describes an orthogonal hypervolume using a min and

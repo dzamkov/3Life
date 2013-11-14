@@ -18,7 +18,7 @@ function init() {
 
 	scene = new Render.Scene();
 	renderer = new Render.Matter(scene);
-	renderer.set(node = testWorld);
+	renderer.set(node = Matter.test);
 	scene.flush();
 	
 	gl.enable(gl.CULL_FACE);
@@ -56,7 +56,7 @@ function init() {
 			elapsedFrames = 0;
 		}
 		onRenderFrame();
-		onUpdateFrame(interval);
+		onUpdateFrame(1 / 60.0);
 		requestAnimationFrame(animate);
 	})();
 	
@@ -64,7 +64,7 @@ function init() {
 		function randEdit(node, depth) {
 			if (Math.random() < depth * 0.3 - 0.8) {
 				return {
-					node : empty,
+					node : Matter.empty,
 					change : Volume.Boolean.true};
 			} else {
 				var i = Math.floor(Math.random() * 8);
@@ -99,8 +99,8 @@ function onMouseMove(event) {
 	if (document.webkitPointerLockElement === canvas) {
 		var x = event.movementX || event.webkitMovementX;
 		var y = event.movementY || event.webkitMovementY;
-		x *= 0.01;
-		y *= 0.01;
+		x *= 0.005;
+		y *= 0.005;
 		eyeYaw = eyeYaw - x;
 		eyePitch = Math.max(Math.PI * -0.4, Math.min(Math.PI * 0.4, eyePitch - y));
 	}
@@ -126,9 +126,9 @@ function onMouseWheel(event) {
 	zoom = Math.min(0.5, Math.max(-0.5, zoom));
 }
 
-var eyePos = [0, 0, 0];
+var eyePos = [-0.5, 0.0, 0.6];
 var eyeYaw = 0.0;
-var eyePitch = 0.0;
+var eyePitch = -0.5;
 function onRenderFrame() {
 	gl.clearColor(0.0, 0.0, 0.0, 1.0);
 	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -136,7 +136,7 @@ function onRenderFrame() {
 		gl.useProgram(program);
 		
 		var proj = mat4.create();
-		mat4.perspective(45, canvas.width / canvas.height, 0.01, 10.0, proj);
+		mat4.perspective(45, canvas.width / canvas.height, 0.001, 2.0, proj);
 		
 		var view = mat4.create();
 		var eyeDir = vec3.create([
@@ -152,15 +152,25 @@ function onRenderFrame() {
 	}
 }
 
+var minDis = 0.001;
+var lastDis = 0.0;
 function onUpdateFrame(delta) {
 	var eyeDir = vec3.create([
 		Math.cos(eyeYaw) * Math.cos(eyePitch),
 		Math.sin(eyeYaw) * Math.cos(eyePitch),
 		Math.sin(eyePitch)]);
 	var eyeLeft = vec3.cross([0, 0, 1], eyeDir);
-	var move = 0.1 * delta;
+	var move = 1.0 * Math.pow(lastDis, 0.7) * delta;
 	if (keyState[37] || keyState[65]) vec3.add(eyePos, vec3.scale(eyeLeft, move));
 	if (keyState[39] || keyState[68]) vec3.subtract(eyePos, vec3.scale(eyeLeft, move));
 	if (keyState[38] || keyState[87]) vec3.add(eyePos, vec3.scale(eyeDir, move));
 	if (keyState[40] || keyState[83]) vec3.subtract(eyePos, vec3.scale(eyeDir, move));
+	var near = Matter.near(node, 1.0, [0.0, 0.0, 0.0], eyePos);
+	if (near.dis < minDis) {
+		var Vector = Volume.Vector;
+		vec3.add(eyePos, Vector.scale(near.norm, minDis - near.dis));
+		lastDis = minDis;
+	} else {
+		lastDis = near.dis;
+	}
 }

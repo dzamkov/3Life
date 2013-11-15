@@ -86,7 +86,7 @@ function init() {
 		var res = randEdit(node, 0);
 		renderer.update(res.node, res.change);
 		node = res.node;
-	}, 30);
+	}, 3000);
 }
 
 function onResize() {
@@ -170,7 +170,8 @@ function onUpdateFrame(delta) {
 		lastDis = near.dis;
 		if (near.dis < minDis) {
 			var Vector = Volume.Vector;
-			vec3.add(eyePos, Vector.scale(near.norm, minDis - near.dis));
+			Vector.scale(near.norm, minDis - near.dis);
+			vec3.add(eyePos, near.norm);
 		} else break;
 	}
 	

@@ -8,61 +8,41 @@ function Space(dimension) {
 	// Contains functions and values related to vectors.
 	var Vector = new function() {
 	
-		// Construct the zero vector.
-		var zero = new Array(dimension);
-		for (var i = 0; i < dimension; i++) {
-			zero[i] = 0.0;
-		}
-	
-		// Constructs a vector with the coordinates given
-		// by arguments.
-		function create() {
-			return arguments;
-		}
-		
-		// Creates a copy of the given vector.
-		function copy(vec) {
-			var res = new Array(dimension);
+		// Creates a vector from the given components.
+		function create(components) {
+			var vec = new Array(dimension);
 			for (var i = 0; i < dimension; i++) {
-				res[i] = vec[i];
+				vec[i] = components[i];
 			}
-			return res;
+			return vec;
 		}
 		
-		// Non-destructively adds two vectors.
+		// Adds a vector to another.
 		function add(a, b) {
-			var res = new Array(dimension);
 			for (var i = 0; i < dimension; i++) {
-				res[i] = a[i] + b[i];
+				a[i] += b[i];
 			}
-			return res;
 		}
 		
-		// Non-destructively subtracts a vector from another.
+		// Subtracts a vector from another.
 		function sub(a, b) {
-			var res = new Array(dimension);
 			for (var i = 0; i < dimension; i++) {
-				res[i] = a[i] - b[i];
+				a[i] -= b[i];
 			}
-			return res;
 		}
 		
-		// Non-destructively scales a vector by a given amount.
+		// Scales a vector by a given amount.
 		function scale(vec, amt) {
-			var res = new Array(dimension);
 			for (var i = 0; i < dimension; i++) {
-				res[i] = vec[i] * amt;
+				vec[i] *= amt;
 			}
-			return res;
 		}
 		
 		// Computes the absolute values of all components of a vector.
 		function abs(vec) {
-			var res = new Array(dimension);
 			for (var i = 0; i < dimension; i++) {
-				res[i] = Math.abs(vec[i]);
+				vec[i] = Math.abs(vec[i]);
 			}
-			return res;
 		}
 		
 		// Computes the length of a vector.
@@ -75,9 +55,7 @@ function Space(dimension) {
 		}
 	
 		// Define exports.
-		this.zero = zero;
 		this.create = create;
-		this.copy = copy;
 		this.add = add;
 		this.sub = sub;
 		this.abs = abs;

@@ -60,11 +60,14 @@ var Matter = new function() {
 	// This function assumes that the node occupies the cubic area described by
 	// 'Volume.Bound.unit'.
 	function near(node, pos) {
+		// TODO: Max distance
+	
 		if (node.depth == 0) {
 			if (node === empty) {
 				return null;
 			} else {
-				var abs = Vector.abs(pos);
+				var abs = Vector.create(pos);
+				Vector.abs(abs);
 				
 				// Find the permutation thats sorts the components of 'abs'.
 				var perm = Permutation.sort(abs);
@@ -75,8 +78,8 @@ var Matter = new function() {
 				
 					// Nearest to a face.
 					var dis = abs[2] - 0.5;
-					var point = Vector.copy(pos);
-					var norm = Vector.copy(Vector.zero);
+					var point = Vector.create(pos);
+					var norm = Vector.create([0.0, 0.0, 0.0]);
 					if (point[perm[2]] > 0.0) {
 						point[perm[2]] = 0.5;
 						norm[perm[2]] = 1.0;
@@ -91,10 +94,12 @@ var Matter = new function() {
 					abs[1] -= 0.5;
 					abs[2] -= 0.5;
 					var dis = Math.sqrt(abs[1] * abs[1] + abs[2] * abs[2]);
-					var point = Vector.copy(pos);
+					var point = Vector.create(pos);
 					point[perm[1]] = (point[perm[1]] > 0.0) ? 0.5 : -0.5;
 					point[perm[2]] = (point[perm[2]] > 0.0) ? 0.5 : -0.5;
-					var norm = Vector.scale(Vector.sub(pos, point), 1.0 / dis);
+					var norm = Vector.create(pos);
+					Vector.sub(norm, point);
+					Vector.scale(norm, 1.0 / dis);
 					return { dis : dis, point : point, norm : norm };
 				} else {
 				
@@ -103,11 +108,13 @@ var Matter = new function() {
 					abs[1] -= 0.5;
 					abs[2] -= 0.5;
 					var dis = Vector.length(abs);
-					var point = Vector.copy(pos);
+					var point = Vector.create(pos);
 					point[0] = (point[0] > 0.0) ? 0.5 : -0.5;
 					point[1] = (point[1] > 0.0) ? 0.5 : -0.5;
 					point[2] = (point[2] > 0.0) ? 0.5 : -0.5;
-					var norm = Vector.scale(Vector.sub(pos, point), 1.0 / dis);
+					var norm = Vector.create(pos);
+					Vector.sub(norm, point);
+					Vector.scale(norm, 1.0 / dis);
 					return { dis : dis, point : point, norm : norm };
 				}
 			}
@@ -124,16 +131,20 @@ var Matter = new function() {
 		
 			// Finds the nearest point to a child of the given node.
 			function nearChild(node, index, pos) {
-				var nPos = Vector.scale(Vector.sub(pos, offsets[index]), 2.0);
+				var nPos = Vector.create(pos);
+				Vector.sub(nPos, offsets[index]);
+				Vector.scale(nPos, 2.0);
 				var res = near(node.children[index], nPos);
 				if (res !== null) {
 					res.dis *= 0.5;
-					res.point = Vector.add(Vector.scale(res.point, 0.5), offsets[index]);
+					Vector.scale(res.point, 0.5);
+					Vector.add(res.point, offsets[index]);
 				}
 				return res;
 			}
 			
-			var abs = Vector.abs(pos);
+			var abs = Vector.create(pos);
+			Vector.abs(abs);
 			var perm = Permutation.sort(abs);
 			abs = Permutation.apply(perm, abs);
 			
@@ -166,11 +177,14 @@ var Matter = new function() {
 	// Like 'near', but allows the position and size (edge-length) of the
 	// node to be chosen.
 	function nearTransformed(node, size, center, pos) {
-		var nPos = Vector.scale(Vector.sub(pos, center), 1.0 / size);
+		var nPos = Vector.create(pos);
+		Vector.sub(nPos, center);
+		Vector.scale(nPos, 1.0 / size);
 		var res = near(node, nPos);
 		if (res !== null) {
 			res.dis *= size;
-			res.point = Vector.add(Vector.scale(res.point, size), center);
+			Vector.scale(res.point, size);
+			Vector.add(res.point, center);
 		}
 		return res;
 	}
@@ -192,7 +206,7 @@ var Matter = new function() {
 		var x7 = Node.merge(x6, x6, x6, x6, e, e, x4, e);
 		var x8 = Node.merge(x7, x7, r, x5, e, e, e, e);
 		var x9 = Node.merge(x8, x8, x8, x8, e, e, e, e);
-		return x1;
+		return x8;
 	})();
 	
 	// Define exports.

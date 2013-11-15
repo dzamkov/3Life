@@ -60,7 +60,7 @@ function init() {
 		requestAnimationFrame(animate);
 	})();
 	
-	/*setInterval(function() {
+	setInterval(function() {
 		function randEdit(node, depth) {
 			if (Math.random() < depth * 0.3 - 0.8) {
 				return {
@@ -86,7 +86,7 @@ function init() {
 		var res = randEdit(node, 0);
 		renderer.update(res.node, res.change);
 		node = res.node;
-	}, 300);*/
+	}, 3000);
 }
 
 function onResize() {

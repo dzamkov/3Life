@@ -140,14 +140,9 @@ var Matter = new function() {
 				return res;
 			}
 			
-			var abs = Vector.create(pos);
-			Vector.abs(abs);
-			var perm = Permutation.sort(abs);
-			abs = Permutation.apply(perm, abs);
-			
 			// Check if the node is within the range specified by 'max'. Approximate
 			// the node as a sphere to hurry this up.
-			if (isFinite(max) && Vector.length(abs) > max + 0.8660254) {
+			if (isFinite(max) && Vector.length(pos) > max + 0.8660254) {
 				return null;
 			}
 			
@@ -204,7 +199,7 @@ var Matter = new function() {
 		var x7 = Node.merge(x6, x6, x6, x6, e, e, x4, e);
 		var x8 = Node.merge(x7, x7, r, x5, e, e, e, e);
 		var x9 = Node.merge(x8, x8, x8, x8, e, e, e, e);
-		return x9;
+		return x8;
 	})();
 	
 	// Define exports.

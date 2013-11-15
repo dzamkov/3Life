@@ -145,12 +145,10 @@ var Matter = new function() {
 			var perm = Permutation.sort(abs);
 			abs = Permutation.apply(perm, abs);
 			
-			// Check if the node is within the range
-			// specified by 'max'.
+			// Check if the node is within the range specified by 'max'. Approximate
+			// the node as a sphere to hurry this up.
 			if (isFinite(max)) {
-				var min = Vector.create(abs);
-				min[0] -= 0.5; min[1] -= 0.5; min[2] -= 0.5;
-				if (Vector.length(min) > max) return null;
+				if (Vector.length(abs) > max + 0.8660254) return null;
 			}
 			
 			// Find the closest child node.
@@ -206,7 +204,7 @@ var Matter = new function() {
 		var x7 = Node.merge(x6, x6, x6, x6, e, e, x4, e);
 		var x8 = Node.merge(x7, x7, r, x5, e, e, e, e);
 		var x9 = Node.merge(x8, x8, x8, x8, e, e, e, e);
-		return x8;
+		return x7;
 	})();
 	
 	// Define exports.

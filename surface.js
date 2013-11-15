@@ -393,6 +393,8 @@ var Surface = new function() {
 			return withinDelta(node, Volume.Boolean.true, pos, flip);
 		}
 		
+		var allCache = new HashMap(3049);
+		
 		// Gets a complete description of the slices in the given matter node, the result
 		// of which can be used to compute any 'withinDelta' slice. This function can be used
 		// to get delta surfaces by specifying which parts of the matter node have changed
@@ -500,9 +502,10 @@ var Surface = new function() {
 					return { head : nHead, tail : tail };
 				}
 				
-				// TODO: Bring back memoization.
 				// Make sure to save and use work we've already done.
-				return compute(node, change);
+				return allCache.lookup([node, change], function(info) {
+					return compute(info[0], info[1]);
+				});
 			}
 		}
 		

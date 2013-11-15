@@ -60,7 +60,7 @@ function init() {
 		requestAnimationFrame(animate);
 	})();
 	
-	setInterval(function() {
+	/*setInterval(function() {
 		function randEdit(node, depth) {
 			if (Math.random() < depth * 0.3 - 0.8) {
 				return {
@@ -86,7 +86,7 @@ function init() {
 		var res = randEdit(node, 0);
 		renderer.update(res.node, res.change);
 		node = res.node;
-	}, 3000);
+	}, 300);*/
 }
 
 function onResize() {
@@ -152,6 +152,7 @@ function onRenderFrame() {
 	}
 }
 
+var maxDis = 0.5;
 var minDis = 0.001;
 var lastDis = 0.0;
 function onUpdateFrame(delta) {
@@ -160,16 +161,16 @@ function onUpdateFrame(delta) {
 		Math.sin(eyeYaw) * Math.cos(eyePitch),
 		Math.sin(eyePitch)]);
 	var eyeLeft = vec3.cross([0, 0, 1], eyeDir);
-	var move = 1.0 * Math.pow(lastDis, 0.7) * delta;
+	var move = 0.8 * (lastDis + 0.05) * delta;
 	if (keyState[37] || keyState[65]) vec3.add(eyePos, vec3.scale(eyeLeft, move));
 	if (keyState[39] || keyState[68]) vec3.subtract(eyePos, vec3.scale(eyeLeft, move));
 	if (keyState[38] || keyState[87]) vec3.add(eyePos, vec3.scale(eyeDir, move));
 	if (keyState[40] || keyState[83]) vec3.subtract(eyePos, vec3.scale(eyeDir, move));
 	for (var i = 0; i < 3; i++) {
-		var near = Matter.nearTransformed(node, 1.0, [0.0, 0.0, 0.0], eyePos, Infinity);
-		lastDis = near.dis;
-		if (near.dis < minDis) {
-			var Vector = Volume.Vector;
+		var Vector = Volume.Vector;
+		var near = Matter.nearTransformed(node, 1.0, [0.0, 0.0, 0.0], eyePos, maxDis);
+		lastDis = near ? near.dis : maxDis;
+		if (near && near.dis < minDis) {
 			Vector.scale(near.norm, minDis - near.dis);
 			vec3.add(eyePos, near.norm);
 		} else break;

@@ -8,6 +8,15 @@ function Space(dimension) {
 	// Contains functions and values related to vectors.
 	var Vector = new function() {
 	
+		// Creates a new zero vector.
+		function zero() {
+			var vec = new Array(dimension);
+			for (var i = 0; i < dimension; i++) {
+				vec[i] = 0.0;
+			}
+			return vec;
+		}
+	
 		// Creates a vector from the given components.
 		function create(components) {
 			var vec = new Array(dimension);
@@ -55,6 +64,7 @@ function Space(dimension) {
 		}
 	
 		// Define exports.
+		this.zero = zero;
 		this.create = create;
 		this.add = add;
 		this.sub = sub;

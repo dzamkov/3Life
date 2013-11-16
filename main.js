@@ -169,7 +169,7 @@ function onUpdateFrame(delta) {
 	function pred(node) { return node !== Matter.empty; }
 	for (var i = 0; i < 3; i++) {
 		var Vector = Volume.Vector;
-		var near = Matter.nearTransformed(pred, node, 1.0, [0.0, 0.0, 0.0], eyePos, maxDis);
+		var near = Volume.nearTransformed(pred, node, 1.0, [0.0, 0.0, 0.0], eyePos, maxDis);
 		lastDis = near ? near.dis : maxDis;
 		if (near && near.dis < minDis) {
 			Vector.scale(near.norm, minDis - near.dis);

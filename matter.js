@@ -1,3 +1,4 @@
+
 // Contains functions and types related to 3D matter.
 var Matter = new function() {
 	
@@ -8,12 +9,17 @@ var Matter = new function() {
 	// A node representing a physical configuration of a 3D space.
 	var Node = Volume.Node();
 	
-	// Creates a new leaf matter node with the given material.
-	function create(material) {
+	// Creates a new leaf matter node with the given substance.
+	function create(substance) {
 		var node = Node.leaf();
-		node.material = material;
+		node.substance = substance;
 		return node;
 	}
+	
+	// A special matter node that is a place-holder for matter that
+	// can't be seen, and thus doesn't have any visual properties
+	// and doesn't need to be rendered.
+	var inside = Node.leaf();
 	
 	// Represents empty space.
 	var empty = create(Material.empty);
@@ -53,17 +59,17 @@ var Matter = new function() {
 			}
 		}
 	}
-	
-	// Gets the surface point in the given node that is nearest to the
-	// given position. Also returns the normal at that point, and the
+
+	// Gets the point nearest to the given position that is on a leaf node which
+	// satisfies the given predicate. Also returns the normal at that point, and the
 	// signed distance to the point. Returns null if the node is completely empty. 
 	// This function assumes that the node occupies the cubic area described by
 	// 'Volume.Bound.unit'. The max parameter sets the maximum distance for
 	// which points are considered; this is an optimization, not an absolute;
 	// sometimes, points farther than the max distance will be returned.
-	function near(node, pos, max) {
+	function near(pred, node, pos, max) {
 		if (node.depth == 0) {
-			if (node === empty) {
+			if (!pred(node)) {
 				return null;
 			} else {
 				var abs = Vector.create(pos);
@@ -127,11 +133,11 @@ var Matter = new function() {
 			}
 		
 			// Finds the nearest point to a child of the given node.
-			function nearChild(node, index, pos, max) {
+			function nearChild(pred, node, index, pos, max) {
 				var nPos = Vector.create(pos);
 				Vector.sub(nPos, offsets[index]);
 				Vector.scale(nPos, 2.0);
-				var res = near(node.children[index], nPos, max * 2.0);
+				var res = near(pred, node.children[index], nPos, max * 2.0);
 				if (res !== null) {
 					res.dis *= 0.5;
 					Vector.scale(res.point, 0.5);
@@ -153,14 +159,14 @@ var Matter = new function() {
 			var i = x | y | z;
 			
 			// Check children in approximate order of closeness.
-			var best = nearChild(node, i, pos, max);
-			best = minDis(best, nearChild(node, i ^ 1, pos, best ? best.dis : max)); 
-			best = minDis(best, nearChild(node, i ^ 2, pos, best ? best.dis : max)); 
-			best = minDis(best, nearChild(node, i ^ 4, pos, best ? best.dis : max)); 
-			best = minDis(best, nearChild(node, i ^ 3, pos, best ? best.dis : max));
-			best = minDis(best, nearChild(node, i ^ 6, pos, best ? best.dis : max));
-			best = minDis(best, nearChild(node, i ^ 5, pos, best ? best.dis : max)); 
-			best = minDis(best, nearChild(node, i ^ 7, pos, best ? best.dis : max));
+			var best = nearChild(pred, node, i, pos, max);
+			best = minDis(best, nearChild(pred, node, i ^ 1, pos, best ? best.dis : max)); 
+			best = minDis(best, nearChild(pred, node, i ^ 2, pos, best ? best.dis : max)); 
+			best = minDis(best, nearChild(pred, node, i ^ 4, pos, best ? best.dis : max)); 
+			best = minDis(best, nearChild(pred, node, i ^ 3, pos, best ? best.dis : max));
+			best = minDis(best, nearChild(pred, node, i ^ 6, pos, best ? best.dis : max));
+			best = minDis(best, nearChild(pred, node, i ^ 5, pos, best ? best.dis : max)); 
+			best = minDis(best, nearChild(pred, node, i ^ 7, pos, best ? best.dis : max));
 			
 			// Return closest found point.
 			return best;
@@ -169,11 +175,11 @@ var Matter = new function() {
 	
 	// Like 'near', but allows the position and size (edge-length) of the
 	// node to be chosen.
-	function nearTransformed(node, size, center, pos, max) {
+	function nearTransformed(pred, node, size, center, pos, max) {
 		var nPos = Vector.create(pos);
 		Vector.sub(nPos, center);
 		Vector.scale(nPos, 1.0 / size);
-		var res = near(node, nPos, max / size);
+		var res = near(pred, node, nPos, max / size);
 		if (res !== null) {
 			res.dis *= size;
 			Vector.scale(res.point, size);
@@ -185,9 +191,13 @@ var Matter = new function() {
 	// A test configuration of matter.
 	this.test = (function() {
 		var e = empty;
-		var r = create(Material.solid(0.7, 0.3, 0.1));
-		var g = create(Material.solid(0.1, 0.7, 0.3));
-		var b = create(Material.solid(0.1, 0.3, 0.7));
+		var rM = Material.color(0.7, 0.3, 0.1);
+		var gM = Material.color(0.1, 0.7, 0.3);
+		var bM = Material.color(0.1, 0.3, 0.7);
+		
+		var r = create(Substance.solidUniform(rM));
+		var g = create(Substance.solidUpright(gM, bM, bM));
+		var b = create(Substance.solidUniform(bM));
 		
 		var x0 = Node.merge(b, b, b, b, e, g, e, g);
 		var x1 = Node.merge(x0, x0, x0, x0, e, e, e, e);

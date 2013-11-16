@@ -234,7 +234,7 @@ var Render = new function() {
 			gl.enableVertexAttribArray(program.pos);
 			gl.enableVertexAttribArray(program.norm);
 			this.buffers.forEach(function(mat, buffer) {
-				if (mat instanceof Material.Solid) {
+				if (mat instanceof Material.Color) {
 					buffer.bind();
 					gl.uniform3f(program.color, mat.r, mat.g, mat.b);
 					gl.vertexAttribPointer(program.pos, 3, gl.FLOAT, false, 6 * 4, 0);
@@ -325,6 +325,10 @@ var Render = new function() {
 	
 	// Define matter renderer functions.
 	(function() {
+	
+		// TODO: maybe we can have a buffer for each surface. This will reduce the size of
+		// each item (no need for individual normals and z positions), but more importantly,
+		// will allow sorted rendering of surfaces, which would make rendering faster.
 	
 		// Clears the node for this matter renderer. After this is called, use 'set'
 		// to set a new node, or ignore the renderer to make it go away.

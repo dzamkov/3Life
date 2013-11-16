@@ -166,9 +166,10 @@ function onUpdateFrame(delta) {
 	if (keyState[39] || keyState[68]) vec3.subtract(eyePos, vec3.scale(eyeLeft, move));
 	if (keyState[38] || keyState[87]) vec3.add(eyePos, vec3.scale(eyeDir, move));
 	if (keyState[40] || keyState[83]) vec3.subtract(eyePos, vec3.scale(eyeDir, move));
+	function pred(node) { return node !== Matter.empty; }
 	for (var i = 0; i < 3; i++) {
 		var Vector = Volume.Vector;
-		var near = Matter.nearTransformed(node, 1.0, [0.0, 0.0, 0.0], eyePos, maxDis);
+		var near = Matter.nearTransformed(pred, node, 1.0, [0.0, 0.0, 0.0], eyePos, maxDis);
 		lastDis = near ? near.dis : maxDis;
 		if (near && near.dis < minDis) {
 			Vector.scale(near.norm, minDis - near.dis);

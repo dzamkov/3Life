@@ -324,15 +324,19 @@ var Surface = new function() {
 				pChange === Volume.Boolean.false)
 				return same;
 			else if (n.depth == 0 && p.depth == 0) {
-				var n = n.material;
-				var p = p.material;
-				if (!flip) {
-					if (!p.isTransparent) return inside;
-					return lookup(n);
-				} else {
-					if (!n.isTransparent) return inside;
-					return lookup(p);
+				if (n === Matter.inside || p === Matter.inside) return inside;
+				var n = n.substance;
+				var p = p.substance;
+				if (flip) {
+					var temp = p;
+					p = n;
+					n = temp;
 				}
+				if (!p.isTransparent) return inside;
+				if (n === p) return empty;
+				if (n instanceof Substance.Solid)
+					return lookup(n.getFaceMaterial(axis, flip));
+				return empty;
 			} else {
 				var children = new Array(4);
 				for (var i = 0; i < 4; i++) {
@@ -359,7 +363,7 @@ var Surface = new function() {
 			if (change === Volume.Boolean.false) {
 				return same;
 			} else if (node.depth == 0) {
-				return node.material.isTransparent ? empty : inside;
+				return node.substance.isTransparent ? empty : inside;
 			} else {
 				if (pos == 0.0) {
 					var children = new Array(4);
@@ -413,7 +417,7 @@ var Surface = new function() {
 			if (change === Volume.Boolean.false) {
 				return { head : same, tail : [] };
 			} else if (node.depth == 0) {
-				var head = node.material.isTransparent ? empty : inside;
+				var head = node.substance.isTransparent ? empty : inside;
 				return { head : head, tail : [] };
 			} else {
 				function compute(node, change) {

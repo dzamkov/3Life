@@ -197,7 +197,7 @@ var Matter = new function() {
 		
 		var r = create(Substance.solidUniform(rM));
 		var g = create(Substance.solidUpright(gM, bM, bM));
-		var b = create(Substance.solidUniform(bM));
+		var b = inside; // create(Substance.solidUniform(bM));
 		
 		var x0 = Node.merge(b, b, b, b, e, g, e, g);
 		var x1 = Node.merge(x0, x0, x0, x0, e, e, e, e);
@@ -217,6 +217,7 @@ var Matter = new function() {
 	this.get = Node.get;
 	this.merge = Node.merge;
 	this.create = create;
+	this.inside = inside;
 	this.empty = empty;
 	this.near = near;
 	this.nearTransformed = nearTransformed;

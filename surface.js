@@ -363,7 +363,7 @@ var Surface = new function() {
 			if (change === Volume.Boolean.false) {
 				return same;
 			} else if (node.depth == 0) {
-				return node.substance.isTransparent ? empty : inside;
+				return (node !== Matter.inside && node.substance.isTransparent) ? empty : inside;
 			} else {
 				if (pos == 0.0) {
 					var children = new Array(4);
@@ -417,7 +417,7 @@ var Surface = new function() {
 			if (change === Volume.Boolean.false) {
 				return { head : same, tail : [] };
 			} else if (node.depth == 0) {
-				var head = node.substance.isTransparent ? empty : inside;
+				var head = (node !== Matter.inside && node.substance.isTransparent) ? empty : inside;
 				return { head : head, tail : [] };
 			} else {
 				function compute(node, change) {

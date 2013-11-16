@@ -1,24 +1,25 @@
-
-// Contains functions and types related to 3D matter.
+// Contains functions and types related to renderable 3D volumes.
 var Matter = new function() {
 
-	// A node representing a physical configuration of a 3D space.
+	// A spatial node representing the visual contents of
+	// a cubic 3D area.
 	var Node = Volume.Node();
 	
-	// Creates a new leaf matter node with the given substance.
-	function create(substance) {
+	// Represents a volume that is not visible, and thus can 
+	// be rendered in any way.
+	var inside = Node.leaf();
+	
+	// Gets the leaf node for the given substance.
+	function lookup(substance) {
+		if (substance.node) return substance.node;
 		var node = Node.leaf();
 		node.substance = substance;
+		substance.node = node;
 		return node;
 	}
 	
-	// A special matter node that is a place-holder for matter that
-	// can't be seen, and thus doesn't have any visual properties
-	// and doesn't need to be rendered.
-	var inside = Node.leaf();
-	
-	// Represents empty space.
-	var empty = create(Material.empty);
+	// Represents a volume that is empty.
+	var empty = lookup(Material.empty);
 	
 	// A test configuration of matter.
 	this.test = (function() {
@@ -27,9 +28,9 @@ var Matter = new function() {
 		var gM = Material.color(0.1, 0.7, 0.3);
 		var bM = Material.color(0.1, 0.3, 0.7);
 		
-		var r = create(Substance.solidUniform(rM));
-		var g = create(Substance.solidUpright(gM, bM, bM));
-		var b = inside; // create(Substance.solidUniform(bM));
+		var r = lookup(Substance.solidUniform(rM));
+		var g = lookup(Substance.solidUpright(gM, bM, bM));
+		var b = lookup(Substance.solidUniform(bM));
 		
 		var x0 = Node.merge(b, b, b, b, e, g, e, g);
 		var x1 = Node.merge(x0, x0, x0, x0, e, e, e, e);
@@ -48,7 +49,7 @@ var Matter = new function() {
 	this.Node = Node;
 	this.get = Node.get;
 	this.merge = Node.merge;
-	this.create = create;
+	this.lookup = lookup;
 	this.inside = inside;
 	this.empty = empty;
 }

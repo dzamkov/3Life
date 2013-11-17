@@ -56,8 +56,8 @@ function Automata(rule) {
 	// Gets a 2x2x2 node representing the state of the center of the given
 	// 4x4x4 node after one iteration. The supplied node must have a depth
 	// of at most 2.
-	function nextBase(node) {
-		
+	function computeNextBase(node) {
+
 		// Create a flat array describing the source node.
 		var s = new Array(64);
 		for (var i = 0; i < 64; i++) {
@@ -91,11 +91,9 @@ function Automata(rule) {
 		return Node.get(children);
 	}
 	
-	// Gets a '2^(d-1)' node representing the state of the center of the given
-	// '2^d' node after the given amount iterations. The 'd' is the given 
-	// "actual" depth of the node, which must be at least 'node.depth'. The
-	// number of iterations must not exceed '2^(d-2)'.
-	function next(node, depth, iters) {
+	
+	// Computes the general case of 'next', without accessing the cache.
+	function computeNext(node, depth, iters) {
 		if (iters == 0) {
 			var children = new Array(8);
 			for (var i = 0; i < 8; i++) {
@@ -103,7 +101,7 @@ function Automata(rule) {
 			}
 			return Node.get(children);
 		} else if (depth == 2) {
-			return nextBase(node);
+			return computeNextBase(node);
 		} else {
 		
 			// Create a flat array of the '2^(d-2)' nodes.
@@ -150,13 +148,38 @@ function Automata(rule) {
 		}
 	}
 	
+	// Gets a '2^(d-1)' node representing the state of the center of the given
+	// '2^d' node after the given amount iterations. The 'd' is the given 
+	// "actual" depth of the node, which must be at least 'node.depth'. The
+	// number of iterations must not exceed '2^(d-2)'.
+	function next(node, depth, iters) {
+	
+		// Make sure to save and use work we've already done.
+		var depthOffset = depth - node.depth;
+		if (node.next) {
+			if (node.next[depthOffset]) {
+				if (node.next[depthOffset][iters]) {
+					return node.next[depthOffset][iters];
+				} else {
+					return node.next[depthOffset][iters] = computeNext(node, depth, iters);
+				}
+			} else {
+				node.next[depthOffset] = new Array();
+				return node.next[depthOffset][iters] = computeNext(node, depth, iters);
+			}
+		} else {
+			node.next = new Array();
+			node.next[depthOffset] = new Array();
+			return node.next[depthOffset][iters] = computeNext(node, depth, iters);
+		}
+	}
+	
 	// Gets a node representing a progressed state of the given node when in a medium
 	// of the given state. The "actual" depth of the node must be given, and must be
 	// at least 'node.depth'. This function can compute up to '2^d' iterations foward.
 	function nextInPlace(node, medium, depth, iters) {
 		var node = node;
 		var m = lookup(medium);
-		
 		node = Node.merge(node, m, m, m, m, m, m, m);
 		node = Node.merge(m, m, m, m, m, m, m, node);
 		return next(node, depth + 2, iters).children[7];

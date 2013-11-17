@@ -64,7 +64,7 @@ function init() {
 	setInterval(function() {
 		node = Gol.nextInPlace(node, 0, node.depth, 1);
 		renderer.reset(Gol.getMatter(node));
-	}, 3000);
+	}, 1000);
 }
 
 function onResize() {

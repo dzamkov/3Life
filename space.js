@@ -351,7 +351,14 @@ function Space(dimension) {
 				function replaceChild(source) { return source.replace(from, to); };
 				return get(this.children.map(replaceChild));
 			}
-		
+			
+			// Maps all leaf nodes of this node using the given function.
+			this.prototype.map = function(map) {
+				if (this.depth == 0) return map(this);
+				function mapChild(source) { return source.map(map); };
+				return get(this.children.map(mapChild));
+			}
+			
 		}).call(_Node);
 		
 		// Define type exports.

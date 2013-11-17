@@ -15,10 +15,11 @@ function init() {
 		program.pos = gl.getAttribLocation(program, "pos");
 		program.norm = gl.getAttribLocation(program, "norm");
 	});
-
+	
+	node = Gol.test;
 	scene = new Render.Scene();
 	renderer = new Render.Matter(scene);
-	renderer.set(node = Matter.test);
+	renderer.set(Gol.getMatter(node));
 	scene.flush();
 	
 	gl.enable(gl.CULL_FACE);
@@ -61,31 +62,8 @@ function init() {
 	})();
 	
 	setInterval(function() {
-		function randEdit(node, depth) {
-			if (Math.random() < depth * 0.3 - 0.8) {
-				return {
-					node : Matter.empty,
-					change : Volume.Boolean.true};
-			} else {
-				var i = Math.floor(Math.random() * 8);
-				var mChildren = new Array(8);
-				var cChildren = new Array(8);
-				for (var j = 0; j < 8; j++) {
-					mChildren[j] = node.children[j];
-					cChildren[j] = Volume.Boolean.false;
-				}
-				var res = randEdit(mChildren[i], depth + 1);
-				mChildren[i] = res.node;
-				cChildren[i] = res.change;
-				return {
-					node : Matter.get(mChildren),
-					change : Volume.Boolean.get(cChildren)};
-				Matter.get(children);
-			}
-		}
-		var res = randEdit(node, 0);
-		renderer.update(res.node, res.change);
-		node = res.node;
+		node = Gol.nextInPlace(node, 0, node.depth, 1);
+		renderer.reset(Gol.getMatter(node));
 	}, 3000);
 }
 
@@ -176,6 +154,4 @@ function onUpdateFrame(delta) {
 			vec3.add(eyePos, near.norm);
 		} else break;
 	}
-	
-	
 }

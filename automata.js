@@ -154,6 +154,9 @@ function Automata(rule) {
 	// number of iterations must not exceed '2^(d-2)'.
 	function next(node, depth, iters) {
 	
+		// TODO: fix this inefficient mess of caching. If 'iters' is high, the 
+		// resulting cache array will be very big and very empty.
+	
 		// Make sure to save and use work we've already done.
 		var depthOffset = depth - node.depth;
 		if (node.next) {
@@ -208,7 +211,8 @@ Gol.test = (function() {
 	var x2 = Gol.merge(x1, d, d, d, x0, d, d, d);
 	var x3 = Gol.merge(d, d, d, x2, d, d, d, d);
 	var x4 = Gol.merge(d, d, d, d, x3, d, d, d);
-	return x4;
+	var x5 = Gol.merge(d, d, d, x4, d, d, d, d);
+	return x5;
 })();
 Gol.getMatter = function(node) {
 	return node.map(function(leaf) {

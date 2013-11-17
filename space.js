@@ -385,6 +385,15 @@ function Space(dimension) {
 		}
 	}
 	
+	// Gets the offset for a child node of the given index of
+	// a parent node with the given scale and offset.
+	function getOffset(scale, offset, index) {
+		var nOffset = Vector.create(offsets[index]);
+		Vector.scale(nOffset, scale);
+		Vector.add(nOffset, offset);
+		return nOffset;
+	}
+	
 	// Define module exports.
 	var Space = { };
 	Space.Vector = Vector;
@@ -395,6 +404,7 @@ function Space(dimension) {
 	Space.dimension = dimension;
 	Space.vec = Vector.create;
 	Space.offsets = offsets;
+	Space.getOffset = getOffset;
 	return Space;
 };
 
@@ -563,6 +573,8 @@ var Rect = Area.Bound;
 		}
 		return res;
 	}
+	
+	// TODO: Use 'Volume.getOffset' for 'nearChild' and 'nearTransformed'.
 
 	// Define exports.
 	this.Permutation.sort = sort;

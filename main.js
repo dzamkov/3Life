@@ -1,4 +1,4 @@
-var canvas, scene, renderer, node, program;
+var canvas, scene, renderer, automataNode, matterNode, program;
 window.addEventListener('load', init, false);
 function init() {
 	canvas = document.getElementById('canvas');
@@ -16,10 +16,10 @@ function init() {
 		program.norm = gl.getAttribLocation(program, "norm");
 	});
 	
-	node = Gol.test;
+	automataNode = Gol.nextInPlace(Gol.test, 0, Gol.test.depth, 30);
 	scene = new Render.Scene();
-	renderer = new Render.Matter(scene);
-	renderer.set(Gol.getMatter(node));
+	renderer = new Render.Matter.Complex(scene.pushMatter(), scene.remove);
+	renderer.set(matterNode = Gol.getMatter(automataNode));
 	scene.flush();
 	
 	gl.enable(gl.CULL_FACE);
@@ -61,10 +61,10 @@ function init() {
 		requestAnimationFrame(animate);
 	})();
 	
-	setInterval(function() {
-		node = Gol.nextInPlace(node, 0, node.depth, 1);
-		renderer.reset(Gol.getMatter(node));
-	}, 1000);
+	/*setInterval(function() {
+		automataNode = Gol.nextInPlace(automataNode, 0, automataNode.depth, 1);
+		renderer.reset(matterNode = Gol.getMatter(automataNode));
+	}, 300);*/
 }
 
 function onResize() {
@@ -147,7 +147,7 @@ function onUpdateFrame(delta) {
 	function pred(node) { return node !== Matter.empty; }
 	for (var i = 0; i < 3; i++) {
 		var Vector = Volume.Vector;
-		var near = Volume.nearTransformed(pred, node, 1.0, [0.0, 0.0, 0.0], eyePos, maxDis);
+		var near = Volume.nearTransformed(pred, matterNode, 1.0, [0.0, 0.0, 0.0], eyePos, maxDis);
 		lastDis = near ? near.dis : maxDis;
 		if (near && near.dis < minDis) {
 			Vector.scale(near.norm, minDis - near.dis);

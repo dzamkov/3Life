@@ -212,7 +212,9 @@ Gol.test = (function() {
 	var x3 = Gol.merge(d, d, d, x2, d, d, d, d);
 	var x4 = Gol.merge(d, d, d, d, x3, d, d, d);
 	var x5 = Gol.merge(d, d, d, x4, d, d, d, d);
-	return x5;
+	var x6 = Gol.merge(d, d, d, d, x5, d, d, d);
+	var x7 = Gol.merge(d, d, d, x6, d, d, d, d);
+	return x7;
 })();
 Gol.getMatter = function(node) {
 	return node.map(function(leaf) {
@@ -221,4 +223,4 @@ Gol.getMatter = function(node) {
 	});
 }
 Gol.getMatter.dead = Matter.empty;
-Gol.getMatter.live = Matter.color(0.9, 0.9, 0.9);
+Gol.getMatter.live = Matter.color(0.1, 0.5, 0.9);

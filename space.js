@@ -561,20 +561,18 @@ var Rect = Area.Bound;
 	
 	// Like 'near', but allows the position and size (edge-length) of the
 	// node to be chosen.
-	function nearTransformed(pred, node, size, center, pos, max) {
+	function nearTransformed(pred, node, size, offset, pos, max) {
 		var nPos = Vector.create(pos);
-		Vector.sub(nPos, center);
+		Vector.sub(nPos, offset);
 		Vector.scale(nPos, 1.0 / size);
 		var res = near(pred, node, nPos, max / size);
 		if (res !== null) {
 			res.dis *= size;
 			Vector.scale(res.point, size);
-			Vector.add(res.point, center);
+			Vector.add(res.point, offset);
 		}
 		return res;
 	}
-	
-	// TODO: Use 'Volume.getOffset' for 'nearChild' and 'nearTransformed'.
 
 	// Define exports.
 	this.Permutation.sort = sort;

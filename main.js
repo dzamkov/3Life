@@ -1,21 +1,9 @@
-var canvas, scene, renderer, automataNode, matterNode, program;
+var canvas, scene, renderer, automataNode, matterNode;
 window.addEventListener('load', init, false);
 function init() {
 	canvas = document.getElementById('canvas');
 	gl = canvas.getContext('experimental-webgl');
-	var _gl = linkAll(gl);
-	
-	var vertex = loadText("shaders/vertex/basic.glsl").map(_gl.loadVertexShader);
-	var fragment = loadText("shaders/fragment/basic.glsl").map(_gl.loadFragmentShader);
-	join([vertex, fragment], _gl.loadProgram).done(function (value) { 
-		program = value;
-		program.proj = gl.getUniformLocation(program, "proj");
-        program.view = gl.getUniformLocation(program, "view");
-		program.color = gl.getUniformLocation(program, "color");
-		program.pos = gl.getAttribLocation(program, "pos");
-		program.norm = gl.getAttribLocation(program, "norm");
-	});
-	
+
 	automataNode = Gol.nextInPlace(Gol.test, 0, Gol.test.depth, 30);
 	scene = new Render.Scene();
 	renderer = new Render.Matter.Complex(scene.pushMatter(), scene.remove);
@@ -61,10 +49,10 @@ function init() {
 		requestAnimationFrame(animate);
 	})();
 	
-	/*setInterval(function() {
-		automataNode = Gol.nextInPlace(automataNode, 0, automataNode.depth, 1);
+	/* setInterval(function() {
+		automataNode = Gol.nextInPlace(automataNode, 0, automataNode.depth, 2);
 		renderer.reset(matterNode = Gol.getMatter(automataNode));
-	}, 300);*/
+	}, 500); */
 }
 
 function onResize() {
@@ -110,7 +98,8 @@ var eyePitch = -0.5;
 function onRenderFrame() {
 	gl.clearColor(0.0, 0.0, 0.0, 1.0);
 	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-	if (program) {
+	if (Program.Color.hasValue) {
+		var program = Program.Color.value.get(gl);
 		gl.useProgram(program);
 		
 		var proj = mat4.create();
@@ -125,7 +114,7 @@ function onRenderFrame() {
 		
 		gl.uniformMatrix4fv(program.proj, false, proj);
         gl.uniformMatrix4fv(program.view, false, view);
-		scene.render();
+		scene.render(program);
 		scene.flush();
 	}
 }

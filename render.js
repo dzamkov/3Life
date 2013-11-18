@@ -517,7 +517,7 @@ var Render = new function() {
 		}
 		
 		// Renders the contents of this Scene.
-		this.prototype.render = function() {
+		this.prototype.render = function(program) {
 			gl.enableVertexAttribArray(program.pos);
 			gl.enableVertexAttribArray(program.norm);
 			this.buffers.forEach(function(mat, buffer) {

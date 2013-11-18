@@ -26,6 +26,11 @@ var Matter = new function() {
 		return lookup(Substance.solidUniform(Material.color(r, g, b, a)));
 	}
 	
+	// Gets a textured matter node.
+	function texture(source, isTransparent) {
+		return lookup(Substance.solidUniform(Material.texture(source, isTransparent)));
+	}
+	
 	// Define exports.
 	this.Node = Node;
 	this.get = Node.get;
@@ -34,4 +39,5 @@ var Matter = new function() {
 	this.inside = inside;
 	this.empty = empty;
 	this.color = color;
+	this.texture = texture;
 }

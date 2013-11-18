@@ -46,6 +46,9 @@ function Shader(source, type) {
 	// A promise for a colored fragment shader.
 	this.color = this.request("shaders/color.glsl", this.Type.Fragment);
 	
+	// A promise for a textured fragment shader.
+	this.texture = this.request("shaders/texture.glsl", this.Type.Fragment);
+	
 }).call(Shader);
 
 // Describes a shader program independently from a graphics context.
@@ -90,6 +93,7 @@ function Program(shaders, setup) {
 	function setupCommon(program, gl) {
 		program.proj = gl.getUniformLocation(program, "proj");
         program.view = gl.getUniformLocation(program, "view");
+		program.scale = gl.getUniformLocation(program, "scale");
 		program.pos = gl.getAttribLocation(program, "pos");
 		program.norm = gl.getAttribLocation(program, "norm");
 	}
@@ -97,6 +101,12 @@ function Program(shaders, setup) {
 	// A promise for a colored program.
 	this.color = this.request([Shader.vertex, Shader.color], function(program, gl) {
 		program.color = gl.getUniformLocation(program, "color");
+		setupCommon(program, gl);
+	});
+	
+	// A promise for a textured program.
+	this.texture = this.request([Shader.vertex, Shader.texture], function(program, gl) {
+		program.texture = gl.getUniformLocation(program, "texture");
 		setupCommon(program, gl);
 	});
 
@@ -151,10 +161,22 @@ function Procedure(program, setUniforms) {
 (function() {
 
 	// Creates a promise for a procedure to render a colored material.
-	this.color = function(r, g, b, a) {
+	this.color = function(mat) {
 		return Program.color.map(function(program) {
 			return new Procedure(program, function(program, gl) {
-				gl.uniform3f(program.color, r, g, b);
+				gl.uniform3f(program.color, mat.r, mat.g, mat.b);
+			});
+		});
+	}
+	
+	// Creates a promise for a procedure to render a textured material,
+	// given a promise for the texture itself.
+	this.texture = function(texture) {
+		return joinArgs([Program.texture, texture], function(program, texture) {
+			return new Procedure(program, function(program, gl) {
+				gl.activeTexture(gl.TEXTURE0);
+				gl.bindTexture(gl.TEXTURE_2D, texture.get(gl));
+				gl.uniform1i(program.texture, 0);
 			});
 		});
 	}
@@ -178,7 +200,7 @@ function Material(procedure, isTransparent) {
 	// transparent if the optional alpha parameter is specified.
 	function Color(r, g, b, a) {
 		this.r = r; this.g = g; this.b = b; this.a = a || 1.0;
-		Base.call(this, Procedure.color(r, g, b, a), a ? true : false);
+		Base.call(this, Procedure.color(this), a ? true : false);
 	}
 	
 	// Creates a solid-colored material.
@@ -186,14 +208,24 @@ function Material(procedure, isTransparent) {
 		return new Color(r, g, b, a);
 	}
 	
+	// Represents a textured material.
+	function Texture(source, isTransparent) {
+		Base.call(this, Procedure.texture(source), isTransparent);
+	}
+	
+	// creates a textured material given a promise to the source texture.
+	function texture(source, isTransparent) {
+		return new Texture(source, isTransparent);
+	}
+	
 	// A material that is completely transparent.
 	var empty = new Base(null, true);
-	
-	// TODO: Textured materials
 	
 	// Define exports.
 	this.Color = Color;
 	this.color = color;
+	this.Texture = Texture;
+	this.texture = texture;
 	this.empty = empty;
 
 }).call(Material);

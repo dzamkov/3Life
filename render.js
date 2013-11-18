@@ -519,7 +519,7 @@ var Render = new function() {
 		}
 		
 		// Renders the contents of this Scene.
-		this.prototype.render = function(proj, view) {
+		this.prototype.render = function(proj, view, scale) {
 			this.buffers.forEach(function(mat, buffer) {
 				var procedure = mat.procedure;
 				if (procedure.hasValue) {
@@ -528,6 +528,7 @@ var Render = new function() {
 					gl.useProgram(program);
 					gl.uniformMatrix4fv(program.proj, false, proj);
 					gl.uniformMatrix4fv(program.view, false, view);
+					gl.uniform1f(program.scale, scale);
 					procedure.setUniforms(program, gl);
 					buffer.bind();
 					gl.enableVertexAttribArray(program.pos);

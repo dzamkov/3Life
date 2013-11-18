@@ -109,8 +109,7 @@ function onRenderFrame() {
 		Math.sin(eyePitch)]);
 	mat4.lookAt(eyePos, vec3.add(vec3.create(eyePos), eyeDir), [0, 0, 1], view);
 	
-	
-	scene.render(proj, view);
+	scene.render(proj, view, 1.0 / (1 << matterNode.depth));
 	scene.flush();
 }
 

@@ -525,6 +525,10 @@ var Render = new function() {
 				if (procedure.hasValue) {
 					procedure = procedure.value;
 					var program = procedure.program.get(gl);
+					if (mat.isTransparent) {
+						gl.enable(gl.BLEND);
+						gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+					}
 					gl.useProgram(program);
 					gl.uniformMatrix4fv(program.proj, false, proj);
 					gl.uniformMatrix4fv(program.view, false, view);
@@ -538,6 +542,7 @@ var Render = new function() {
 					buffer.draw(gl.TRIANGLES, 6);
 					gl.disableVertexAttribArray(program.pos);
 					gl.disableVertexAttribArray(program.norm);
+					gl.disable(gl.BLEND);
 				}
 			});
 		}

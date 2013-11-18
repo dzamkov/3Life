@@ -164,7 +164,7 @@ function Procedure(program, setUniforms) {
 	this.color = function(mat) {
 		return Program.color.map(function(program) {
 			return new Procedure(program, function(program, gl) {
-				gl.uniform3f(program.color, mat.r, mat.g, mat.b);
+				gl.uniform4f(program.color, mat.r, mat.g, mat.b, mat.a);
 			});
 		});
 	}

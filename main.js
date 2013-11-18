@@ -49,10 +49,10 @@ function init() {
 		requestAnimationFrame(animate);
 	})();
 	
-	/* setInterval(function() {
-		automataNode = Gol.nextInPlace(automataNode, 0, automataNode.depth, 2);
+	/*setInterval(function() {
+		automataNode = Gol.nextInPlace(automataNode, 0, automataNode.depth, 5);
 		renderer.reset(matterNode = Gol.getMatter(automataNode));
-	}, 500); */
+	}, 2000);*/
 }
 
 function onResize() {
@@ -98,25 +98,20 @@ var eyePitch = -0.5;
 function onRenderFrame() {
 	gl.clearColor(0.0, 0.0, 0.0, 1.0);
 	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-	if (Program.Color.hasValue) {
-		var program = Program.Color.value.get(gl);
-		gl.useProgram(program);
-		
-		var proj = mat4.create();
-		mat4.perspective(45, canvas.width / canvas.height, 0.001, 2.0, proj);
-		
-		var view = mat4.create();
-		var eyeDir = vec3.create([
-			Math.cos(eyeYaw) * Math.cos(eyePitch),
-			Math.sin(eyeYaw) * Math.cos(eyePitch),
-			Math.sin(eyePitch)]);
-		mat4.lookAt(eyePos, vec3.add(vec3.create(eyePos), eyeDir), [0, 0, 1], view);
-		
-		gl.uniformMatrix4fv(program.proj, false, proj);
-        gl.uniformMatrix4fv(program.view, false, view);
-		scene.render(program);
-		scene.flush();
-	}
+	
+	var proj = mat4.create();
+	mat4.perspective(45, canvas.width / canvas.height, 0.001, 2.0, proj);
+	
+	var view = mat4.create();
+	var eyeDir = vec3.create([
+		Math.cos(eyeYaw) * Math.cos(eyePitch),
+		Math.sin(eyeYaw) * Math.cos(eyePitch),
+		Math.sin(eyePitch)]);
+	mat4.lookAt(eyePos, vec3.add(vec3.create(eyePos), eyeDir), [0, 0, 1], view);
+	
+	
+	scene.render(proj, view);
+	scene.flush();
 }
 
 var maxDis = 0.5;

@@ -19,7 +19,7 @@ var Matter = new function() {
 	}
 	
 	// Represents a volume that is empty.
-	var empty = lookup(Material.empty);
+	var empty = lookup(Substance.empty);
 	
 	// Gets a solid-colored matter node.
 	function color(r, g, b, a) {

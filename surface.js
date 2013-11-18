@@ -8,6 +8,7 @@ var Surface = new function() {
 	// Represents an area that is not visible, and thus can 
 	// be rendered in any way.
 	var inside = Node.leaf();
+	inside.material = Material.empty;
 	
 	// A special value used in delta surfaces. This represents an
 	// area that has not changed from the base surface.

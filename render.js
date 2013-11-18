@@ -464,21 +464,23 @@ var Render = new function() {
 		// its four planar corners, and its normal. A reference to the quad
 		// is returned to allow for later removal.
 		this.prototype.push = function(material, a, b, c, d, norm) {
-			var buffer = this.lookupBuffer(material);
-			var index = buffer.forceFree();
-			var data = buffer.edit(index);
-			data[0] = a[0]; data[1] = a[1]; data[2] = a[2];
-			data[6] = b[0]; data[7] = b[1]; data[8] = b[2];
-			data[12] = c[0]; data[13] = c[1]; data[14] = c[2];
-			data[18] = c[0]; data[19] = c[1]; data[20] = c[2];
-			data[24] = b[0]; data[25] = b[1]; data[26] = b[2];
-			data[30] = d[0]; data[31] = d[1]; data[32] = d[2];
-			for (var i = 3; i <36; i += 6) {
-				data[i + 0] = norm[0];
-				data[i + 1] = norm[1];
-				data[i + 2] = norm[2];
-			}
-			return new QuadRef(buffer, index);
+			if (material !== Material.empty) {
+				var buffer = this.lookupBuffer(material);
+				var index = buffer.forceFree();
+				var data = buffer.edit(index);
+				data[0] = a[0]; data[1] = a[1]; data[2] = a[2];
+				data[6] = b[0]; data[7] = b[1]; data[8] = b[2];
+				data[12] = c[0]; data[13] = c[1]; data[14] = c[2];
+				data[18] = c[0]; data[19] = c[1]; data[20] = c[2];
+				data[24] = b[0]; data[25] = b[1]; data[26] = b[2];
+				data[30] = d[0]; data[31] = d[1]; data[32] = d[2];
+				for (var i = 3; i <36; i += 6) {
+					data[i + 0] = norm[0];
+					data[i + 1] = norm[1];
+					data[i + 2] = norm[2];
+				}
+				return new QuadRef(buffer, index);
+			} else return null;
 		}
 		
 		// Returns a function like 'push', but with parameters
@@ -505,7 +507,7 @@ var Render = new function() {
 		
 		// Removes the Quad with the given reference from this scene.
 		this.prototype.remove = function(ref) {
-			ref.buffer.remove(ref.index);
+			if (ref) ref.buffer.remove(ref.index);
 		}
 		
 		// Flushes all buffers for this scene. This must be called when changes
@@ -517,22 +519,27 @@ var Render = new function() {
 		}
 		
 		// Renders the contents of this Scene.
-		this.prototype.render = function(program) {
-			gl.enableVertexAttribArray(program.pos);
-			gl.enableVertexAttribArray(program.norm);
+		this.prototype.render = function(proj, view) {
 			this.buffers.forEach(function(mat, buffer) {
-				if (mat instanceof Material.Color) {
+				var procedure = mat.procedure;
+				if (procedure.hasValue) {
+					procedure = procedure.value;
+					var program = procedure.program.get(gl);
+					gl.useProgram(program);
+					gl.uniformMatrix4fv(program.proj, false, proj);
+					gl.uniformMatrix4fv(program.view, false, view);
+					procedure.setUniforms(program, gl);
 					buffer.bind();
-					gl.uniform3f(program.color, mat.r, mat.g, mat.b);
+					gl.enableVertexAttribArray(program.pos);
+					gl.enableVertexAttribArray(program.norm);
 					gl.vertexAttribPointer(program.pos, 3, gl.FLOAT, false, 6 * 4, 0);
 					gl.vertexAttribPointer(program.norm, 3, gl.FLOAT, false, 6 * 4, 3 * 4);
 					buffer.draw(gl.TRIANGLES, 6);
+					gl.disableVertexAttribArray(program.pos);
+					gl.disableVertexAttribArray(program.norm);
 				}
 			});
-			gl.disableVertexAttribArray(program.pos);
-			gl.disableVertexAttribArray(program.norm);
 		}
-	
 	}).call(Scene);
 	
 	// Define exports.

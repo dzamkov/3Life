@@ -57,6 +57,12 @@ function join(sources, create) {
 	return promise;
 }
 
+function joinArgs(sources, create) {
+	return join(sources, function(args) {
+		return create.apply(this, args);
+	});
+}
+
 function requestText(url) {
 	var promise = new Promise();
 	var request = new XMLHttpRequest();

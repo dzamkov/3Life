@@ -5,7 +5,7 @@ function Shader(source, type) {
 	this.type = type;
 }
 
-// Define shader functions.
+// Define 'Shader' functions.
 (function() {
 
 	// Define types of shaders.
@@ -41,10 +41,10 @@ function Shader(source, type) {
 	}
 	
 	// A promise for a generic vertex shader.
-	this.Vertex = this.request("shaders/vertex.glsl", this.Type.Vertex);
+	this.vertex = this.request("shaders/vertex.glsl", this.Type.Vertex);
 	
 	// A promise for a colored fragment shader.
-	this.Color = this.request("shaders/color.glsl", this.Type.Fragment);
+	this.color = this.request("shaders/color.glsl", this.Type.Fragment);
 	
 }).call(Shader);
 
@@ -54,7 +54,7 @@ function Program(shaders, setup) {
 	this.setup = setup;
 }
 
-// Define program functions.
+// Define 'Program' functions.
 (function() {
 
 	// Loads the program into a graphics context and returns a
@@ -86,34 +86,99 @@ function Program(shaders, setup) {
 		});
 	}
 	
-	// A promise for a colored program.
-	this.Color = this.request([Shader.Vertex, Shader.Color], function(program, gl) {
+	// Sets up the uniforms and attributes that are common between programs.
+	function setupCommon(program, gl) {
 		program.proj = gl.getUniformLocation(program, "proj");
         program.view = gl.getUniformLocation(program, "view");
-		program.color = gl.getUniformLocation(program, "color");
 		program.pos = gl.getAttribLocation(program, "pos");
 		program.norm = gl.getAttribLocation(program, "norm");
+	}
+	
+	// A promise for a colored program.
+	this.color = this.request([Shader.vertex, Shader.color], function(program, gl) {
+		program.color = gl.getUniformLocation(program, "color");
+		setupCommon(program, gl);
 	});
 
 }).call(Program);
 
-// Contains functions and types related to materials. Materials
-// describe the visual properties of a surface.
-var Material = new function() {
+// Describes a texture independently from a graphics context.
+function Texture(image) {
+	this.image = image;
+}
 
+// Define 'Texture' functions.
+(function() {
+
+	// Loads the texture into a graphics context and returns a
+	// handle to it. This function caches the texture for the
+	// last used graphics context.
+	this.prototype.get = function(gl) {
+		if (this.cache && this.cache.gl === gl) {
+			return this.cache.handle;
+		} else {
+			var texture = gl.createTexture();
+			gl.bindTexture(gl.TEXTURE_2D, texture);
+			gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this.image);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_NEAREST);
+			gl.generateMipmap(gl.TEXTURE_2D);
+			this.cache = { gl : gl, handle : texture };
+			return texture;
+		}
+	}
+	
+	// Requests a texture from a url, returning a promise to
+	// be fufilled once it has been downloaded.
+	this.request = function(url) {
+		return requestImage(url).map(function(image) {
+			return new Texture(image);
+		});
+	}
+	
+	// Generic cell texture.
+	this.cell = this.request("textures/cell.png");
+
+}).call(Texture);
+
+// Describes a procedure for rendering a material.
+function Procedure(program, setUniforms) {
+	this.program = program;
+	this.setUniforms = setUniforms;
+}
+
+// Define 'Procedure' functions.
+(function() {
+
+	// Creates a promise for a procedure to render a colored material.
+	this.color = function(r, g, b, a) {
+		return Program.color.map(function(program) {
+			return new Procedure(program, function(program, gl) {
+				gl.uniform3f(program.color, r, g, b);
+			});
+		});
+	}
+	
+}).call(Procedure);
+
+// Describes the visual properties of a surface. The 'procedure'
+// parameter is a promise for the procedure that renders the material.
+function Material(procedure, isTransparent) {
+	this.procedure = procedure;
+	this.isTransparent = isTransparent;
+}
+
+// Define 'Material' functions and sub-types.
+(function() {
+
+	// The base type for materials.
+	var Base = this;
+	
 	// Represents a solid-colored material, which will be
 	// transparent if the optional alpha parameter is specified.
 	function Color(r, g, b, a) {
-		this.r = r;
-		this.g = g;
-		this.b = b;
-		if (a) {
-			this.a = a;
-			this.isTransparent = true;
-		} else {
-			this.a = 1.0;
-			this.isTransparent = false;
-		}
+		this.r = r; this.g = g; this.b = b; this.a = a || 1.0;
+		Base.call(this, Procedure.color(r, g, b, a), a ? true : false);
 	}
 	
 	// Creates a solid-colored material.
@@ -121,32 +186,40 @@ var Material = new function() {
 		return new Color(r, g, b, a);
 	}
 	
-	// TODO: Textured materials
-	
 	// A material that is completely transparent.
-	var empty = new Object();
-	empty.isTransparent = true;
+	var empty = new Base(null, true);
+	
+	// TODO: Textured materials
 	
 	// Define exports.
 	this.Color = Color;
 	this.color = color;
 	this.empty = empty;
+
+}).call(Material);
+
+// Describes the visual properties of a solid cube of matter.
+function Substance(isTransparent) {
+	this.isTransparent = isTransparent;
 }
 
-// Contains functions and types related to substances. Substances
-// describe the visual properties of a solid cube of matter.
-var Substance = new function() {
+// Define 'Substance' functions and sub-types.
+(function() {
+	
+	// The base type for materials.
+	var Base = this;
 
 	// Represents a substance that appears as a solid cube with
 	// faces described by the given materials.
 	function Solid(faces) {
 		this.faces = faces;
-		this.isTransparent = false;
+		isTransparent = false;
 		for (var i = 0; i < 3; i++) {
 			for (var j = 0; j <= 1; j++) {
-				this.isTransparent = this.isTransparent || faces[i][j].isTransparent;
+				isTransparent = isTransparent || faces[i][j].isTransparent;
 			}
 		}
+		Base.call(this, isTransparent);
 	}
 
 	// Gets the material for the given face of a solid substance.
@@ -173,8 +246,7 @@ var Substance = new function() {
 	}
 
 	// A substance that is completely transparent.
-	var empty = new Object();
-	empty.isTransparent = true;
+	var empty = new Base(true);
 	
 	// Define exports.
 	this.Solid = Solid;
@@ -182,4 +254,4 @@ var Substance = new function() {
 	this.solidUniform = solidUniform;
 	this.solidUpright = solidUpright;
 	this.empty = empty;
-}
+}).call(Substance);

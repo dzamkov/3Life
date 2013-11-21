@@ -286,7 +286,7 @@ function Space(dimension) {
 		this.compose = compose;
 	}
 	
-	// Calculate the length of all nodes of this dimension.
+	// Calculate the amount of children each node in this dimension has.
 	var size = 1 << dimension;
 	
 	// Constructs a type that represents a subdivided hypercube in this space.

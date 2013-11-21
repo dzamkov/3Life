@@ -218,6 +218,8 @@ function Material(procedure, isTransparent) {
 		return new Texture(source, isTransparent);
 	}
 	
+	// TODO: Border material.
+	
 	// A material that is completely transparent.
 	var empty = new Base(null, true);
 	

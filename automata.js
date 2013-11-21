@@ -9,6 +9,9 @@ function Rule(states, transition) {
 	this.transition = transition;
 }
 
+// TODO: don't restrict state values to integers, and dont require
+// a finite number of states.
+
 // Define rule functions and types.
 (function() {
 	
@@ -57,6 +60,9 @@ function Automata(rule) {
 	// 4x4x4 node after one iteration. The supplied node must have a depth
 	// of at most 2.
 	function computeNextBase(node) {
+	
+		// TODO: inlining, lots of it. Could probably come up with a tool
+		// or something to inline this node computation stuff.
 
 		// Create a flat array describing the source node.
 		var s = new Array(64);
@@ -115,7 +121,7 @@ function Automata(rule) {
 				var z = ((major & 4) >> 1) | ((minor & 4) >> 2);
 				s[x | (y << 2) | (z << 4)] = v;
 			}
-		
+			
 			// Get the '2^(d-2)' nodes for the first set of iterations.
 			var fdepth = depth - 1;
 			var fiters = Math.min(iters, 1 << (depth - 3));
@@ -124,6 +130,8 @@ function Automata(rule) {
 				for (var y = 0; y < 3; y++) {
 					for (var z = 0; z < 3; z++) {
 						var b = x | (y << 2) | (z << 4);
+						
+						// TODO: 8 of 27 calls to merge here are unnecessary.
 						n[x + (y * 3) + (z * 9)] = next(Node.merge(
 							s[b], s[b + 1], s[b + 4], s[b + 5],
 							s[b + 16], s[b + 17], s[b + 20], s[b + 21]),
@@ -223,4 +231,4 @@ Gol.getMatter = function(node) {
 	});
 }
 Gol.getMatter.dead = Matter.empty;
-Gol.getMatter.live = Matter.color(0.1, 0.5, 0.9, 0.5);
+Gol.getMatter.live = Matter.color(0.1, 0.5, 0.9);

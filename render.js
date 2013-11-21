@@ -169,277 +169,107 @@ function StreamingArrayBuffer(itemSize, initialCapacity) {
 	
 }).call(StreamingArrayBuffer);
 
-// Contains functions and types for rendering logical objects.
+// Contains functions and types for rendering spatial nodes.
 var Render = new function() {
+
+	// Note: "Renderers" are objects which maintain geometry
+	// for spatial nodes. They all take a function called 'push'
+	// which creates a geometry primitive based on the parameters
+	// and returns a function to delete it later if needed.
 	
-	// Contains methods for handling surface geometry. 
-	var Surface = new function() {
+	// A renderer for a spatial node that can potentially be
+	// a space of any dimension. The 'Space' parameter gives
+	// the space corresponding to its dimension. The 'pushLeaf'
+	// function outputs a primitive for a given leaf with the
+	// given scale and offset, and returns a function to later
+	// delete the primitive. The 'scale' and 'offset' parameters
+	// for the renderer are the optional and specify the location
+	// of the root node. If they are not specified, the node is
+	// assumed to occupy 'Space.Bound.unit'.
+	function Direct(Space, pushLeaf, scale, offset) {
+		this.Space = Space;
+		this.tree = null;
+		this.pushLeaf = pushLeaf;
+		this.scale = scale || 1.0;
+		this.offset = offset || Space.Vector.zero();
+	}
 	
-		// The base initializer for surface renderer types.
-		// 'push' is a function that takes a material and rectangle
-		// and outputs the corresponding quad. A reference to the quad
-		// is returned. 'remove' will remove a quad by a given reference.
-		function Base(push, remove) {
-			this.push = push;
-			this.remove = remove;
+	// Define 'Direct' functions.
+	(function() {
+	
+		// Maintains the 'remove' functions for a tree of nodes.
+		function Tree(Space, pushLeaf, node, scale, offset) {
+			this.node = node;
+			this.remove = null;
+			this.children = null;
+			if (node.depth == 0) {
+				this.remove = pushLeaf(node, scale, offset);
+			} else {
+				this.children = new Array(node.children.length);
+				for (var i = 0; i < node.children.length; i++) {
+					this.children[i] = new Tree(Space, pushLeaf,
+						node.children[i], scale * 0.5,
+						Space.getOffset(scale, offset, i));
+				}
+			}
 		}
 		
-		// Resets the node for a renderer.
-		Base.prototype.reset = function(node) {
-			this.clear();
-			this.set(node);
+		// Removes all primitives in a tree.
+		Tree.prototype.clear = function() {
+			if (this.remove) {
+				this.remove();
+			} else {
+				for (var i = 0; i < this.children.length; i++) {
+					this.children[i].clear();
+				}
+			}
 		}
 		
-		// TODO: 'Full' renderer, using views to reduce quads.
+		// Updates all parts of the tree that differ from the given node.
+		Tree.prototype.update = function(Space, pushLeaf, node, scale, offset) {
+			if (this.node === node) return;
+			if (node.depth == 0) {
+				this.clear();
+				this.node = node;
+				this.remove = pushLeaf(node, scale, offset);
+			} else if (this.remove) {
+				this.remove();
+				this.remove = null;
+				this.node = node;
+				this.children = new Array(node.children.length);
+				for (var i = 0; i < node.children.length; i++) {
+					this.children[i] = new Tree(Space, pushLeaf, node.children[i],
+						scale * 0.5, Space.getOffset(scale, offset, i));
+				}
+			} else {
+				for (var i = 0; i < node.children.length; i++) {
+					this.children[i].update(Space, pushLeaf, node.children[i],
+						scale * 0.5, Space.getOffset(scale, offset, i));
+				}
+			}
+		}
 		
-		// Maintains geometry information for a surface by
-		// treating each leaf node as a seperate quad. This
-		// method is fastest to update, but may require many
-		// more quads over other methods, especially when the
-		// scene involves many slim rectangles. Note that
-		// the initial scale and offset of this type of renderer
-		// can optionally be set.
-		function Quick(push, remove, scale, offset) {
-			Base.call(this, push, remove);
-			this.scale = scale || 1.0;
-			this.offset = offset || Area.Vector.zero();
+		// Clears the node for this renderer.
+		this.prototype.clear = function() {
+			this.tree.clear();
 			this.tree = null;
 		}
 		
-		// Define 'Quick' methods.
-		(function() {
-		
-			// Maintains the quad references for a surface node.
-			function Tree(push, node, scale, offset) {
-				this.leaf = null;
-				this.ref = null;
-				this.children = null;
-				if (node.depth == 0) {
-					var rect = Rect.unit.transform(scale, offset);
-					this.leaf = node;
-					this.ref = push(node.material, rect);
-				} else {
-					this.children = new Array(4);
-					for (var i = 0; i < 4; i++) {
-						this.children[i] = new Tree(push,
-							node.children[i], scale * 0.5,
-							Area.getOffset(scale, offset, i));
-					}
-				}
-			}
-			
-			// Clears a quad reference tree.
-			Tree.prototype.clear = function(remove) {
-				if (this.leaf) {
-					remove(this.ref);
-				} else {
-					for (var i = 0; i < 4; i++) {
-						this.children[i].clear(remove);
-					}
-				}
-			}
-			
-			// Updates a quad reference tree.
-			Tree.prototype.update = function(push, remove, delta, scale, offset) {
-				if (delta === Global.Surface.same) return;
-				if (delta.depth == 0) {
-					this.clear();
-					var rect = Rect.Unit.transform(scale, offset);
-					this.ref = push(node.material, rect);
-					this.leaf = delta;
-					this.children = null;
-				} else if (this.leaf) {
-					remove(this.ref);
-					this.children = new Array(4);
-					for (var i = 0; i < 4; i++) {
-						this.children[i] = new Tree(push, 
-							Global.Surface.update(this.leaf, delta.children[i]),
-							scale * 0.5, Area.getOffset(scale, offset, i));
-					}
-					this.leaf = null;
-					this.ref = null;
-				} else {
-					for (var i = 0; i < 4; i++) {
-						this.children[i].update(push, remove, delta.children[i],
-							scale * 0.5, Area.getOffset(scale, offset, index));
-					}
-				}
-			}
-			
-			// Declare inheritance from 'Base'.
-			this.prototype = Object.create(Base.prototype);
-			
-			// Clears the node for this renderer.
-			this.prototype.clear = function() {
-				this.tree.clear(this.remove);
-				this.tree = null;
-			}
-			
-			// Sets the node for this renderer.
-			this.prototype.set = function(node) {
-				this.tree = new Tree(this.push, node, this.scale, this.offset);
-			}
-			
-			// Updates the node for this renderer.
-			this.prototype.update = function(delta) {
-				this.tree.update(this.push, this.remove, delta, this.scale, this.offset);
-			}
-			
-		}).call(Quick);
-
-		// Define exports.
-		this.Base = Base;
-		this.Quick = Quick;
-	}
-	
-	// Contains methods for handling matter geometry.
-	var Matter = new function() {
-	
-		// The base initializer for matter renderer types.
-		// 'push' is a function that takes a material, rectangle, axis, flip
-		// and z-position and outputs the corresponding quad. A reference 
-		// to the quad is returned. 'remove' will remove a quad by a given
-		// reference.
-		function Base(push, remove) {
-			this.push = push;
-			this.remove = remove;
+		// Sets the node for this renderer.
+		this.prototype.set = function(node) {
+			this.tree = new Tree(this.Space, this.pushLeaf, node, this.scale, this.offset);
 		}
 		
-		// Resets the node for a renderer.
-		Base.prototype.reset = function(node) {
-			this.clear();
-			this.set(node);
+		// Updates the node for this renderer.
+		this.prototype.update = function(node) {
+			this.tree.update(this.Space, this.pushLeaf, node, this.scale, this.offset);
 		}
-		
-		// TODO: 'Simple' render model, renders matter nodes directly.
-		
-		// Maintains geometry information for a matter node by maintaining
-		// seperate surface renderers for each "slice" of the matter.
-		function Complex(push, remove, Surface) {
-			Base.call(this, push, remove);
-			this.Surface = Surface || Global.Render.Surface.Quick;
-			this.surfaces = new Array(3);
-		}
-		
-		// Define Complex renderer functions.
-		(function() {
-			
-			// TODO: maybe we can have a buffer for each surface. This will reduce the size of
-			// each item (no need for individual normals and z positions), but more importantly,
-			// will allow sorted rendering of surfaces, which would make rendering faster.
-			
-			// Declare inheritance from 'Base'.
-			this.prototype = Object.create(Base.prototype);
-			
-			// Converts a 'push' function for a matter renderer into a 'push' function for a
-			// surface renderer by supplying a z-position, axis and flip.
-			function surfacePush(push, axis, flip, pos) {
-				return function(mat, rect) {
-					return push(mat, rect, axis, flip, pos);
-				}
-			}
-			
-			// Clears the node for this matter renderer.
-			this.prototype.clear = function() {
-				for (var i = 0; i < 3; i++) {
-					for (var j = 0; j < this.surfaces[i].length; j++) {
-						for (var k = 0; k <= 1; k++) {
-							this.surfaces[i][j][k].clear();
-						}
-					}
-					this.surfaces[i] = null;
-				}
-			}
-			
-			// Sets the node to be rendered by this matter renderer.
-			this.prototype.set = function(node) {
-				for (var axis = 0; axis < 3; axis++) {
-					var slices = Global.Surface.Slice[axis].all(node).tail;
-					this.surfaces[axis] = new Array(slices.length);
-					for (var i = 0; i < slices.length; i++) {
-						var slice = slices[i];
-						var surfaces = this.surfaces[axis][i] = new Array(2);
-						for (var j = 0; j <= 1; j++) {
-							var flip = (j == 1);
-							var surface = surfaces[j] = new this.Surface(
-								surfacePush(this.push, axis, flip, slice.pos),
-								this.remove);
-							surface.set(slice.at[j]);
-						}
-					}
-				}
-			}
-			
-			// Updates the node to be rendered by this renderer to the given node. A boolean
-			// 'change' node must be supplied to specify what areas of the node have changed
-			// between the last set node. Areas that have not changed can safely be marked as
-			// changed, but not vice versa.
-			this.prototype.update = function(node, change) {
-				for (var axis = 0; axis < 3; axis++) {
-					var surfaces = this.surfaces[axis];
-					var all = Global.Surface.Slice[axis].allDelta(node, change);
-					var current = all.head;
-					var slices = all.tail;
-					var i = 0;
-					var j = 0;
-					while (i < slices.length && j < surfaces.length) {
-						var iPos = slices[i].pos;
-						var jPos = surfaces[j][0].pos;
-						if (iPos == jPos) {
-							for (var k = 0; k <= 1; k++) {
-								surfaces[j][k].update(slices[i].at[k]);
-							}
-							current = slices[i].after;
-							i++; j++;
-						} else if (iPos < jPos) {
-							this.surfaces[axis].splice(j, 0, new Array(2));
-							for (var k = 0; k <= 1; k++) {
-								var flip = (k == 1);
-								var surface = surfaces[j][k] = new this.Surface(
-									surfacePush(this.push, axis, flip, iPos), 
-									this.remove);
-								surface.set(slices[i].at[k]);
-							}
-							current = slices[i].after;
-							i++; j++;
-						} else {
-							for (var k = 0; k <= 1; k++) {
-								surfaces[j][k].update(current);
-							}
-							j++;
-						}
-					}
-					while (i < slices.length) {
-						var nSurfaces = new Array(2);
-						for (var k = 0; k <= 1; k++) {
-							var flip = (k == 1);
-							var surface = nSurfaces[k] = new this.Surface(
-								surfacePush(this.push, axis, flip, slices[i].pos),
-								this.remove);
-							surface.set(slices[i].at[k]);
-						}
-						this.surfaces[axis].push(nSurfaces);
-						i++;
-					}
-					while (j < surfaces.length) {
-						for (var k = 0; k <= 1; k++) {
-							surfaces[j][k].update(current);
-						}
-						j++;
-					}
-				}
-			}
-		}).call(Complex);
-		
-		// Define exports.
-		this.Base = Base;
-		this.Complex = Complex;
-	};
 	
+	}).call(Direct);
 
 	// Allows the rendering of a scene, which is a composition of
-	// many quads with varying materials. They supply 'push' and
-	// 'remove' functions which can be used by renderers.
+	// many quads with varying materials. The supplied 'push-' functions
+	// can be used to add quads to the scene.
 	function Scene() {
 		this.buffers = new HashMap(13);
 	}
@@ -453,42 +283,64 @@ var Render = new function() {
 				return new StreamingArrayBuffer(36, 100);
 			});
 		}
-	
-		// A reference to a quad within a buffer.
-		function QuadRef(buffer, index) {
-			this.buffer = buffer;
-			this.index = index;
-		}
-	
-		// Adds a Quad to this scene. The Quad is described by its material,
-		// its four planar corners, and its normal. A reference to the quad
-		// is returned to allow for later removal.
+		
+		// Adds a quad to the scene. The Quad is described by its material,
+		// its four planar corners, and its normal. A function is returned
+		// to later remove the quad.
 		this.prototype.push = function(material, a, b, c, d, norm) {
-			if (material !== Material.empty) {
-				var buffer = this.lookupBuffer(material);
-				var index = buffer.forceFree();
-				var data = buffer.edit(index);
-				data[0] = a[0]; data[1] = a[1]; data[2] = a[2];
-				data[6] = b[0]; data[7] = b[1]; data[8] = b[2];
-				data[12] = c[0]; data[13] = c[1]; data[14] = c[2];
-				data[18] = c[0]; data[19] = c[1]; data[20] = c[2];
-				data[24] = b[0]; data[25] = b[1]; data[26] = b[2];
-				data[30] = d[0]; data[31] = d[1]; data[32] = d[2];
-				for (var i = 3; i <36; i += 6) {
-					data[i + 0] = norm[0];
-					data[i + 1] = norm[1];
-					data[i + 2] = norm[2];
-				}
-				return new QuadRef(buffer, index);
-			} else return null;
+			if (material === Material.empty) return ignore;
+			var buffer = this.lookupBuffer(material);
+			var index = buffer.forceFree();
+			var data = buffer.edit(index);
+			data[0] = a[0]; data[1] = a[1]; data[2] = a[2];
+			data[6] = b[0]; data[7] = b[1]; data[8] = b[2];
+			data[12] = d[0]; data[13] = d[1]; data[14] = d[2];
+			data[18] = d[0]; data[19] = d[1]; data[20] = d[2];
+			data[24] = b[0]; data[25] = b[1]; data[26] = b[2];
+			data[30] = c[0]; data[31] = c[1]; data[32] =c[2];
+			for (var i = 3; i <36; i += 6) {
+				data[i + 0] = norm[0];
+				data[i + 1] = norm[1];
+				data[i + 2] = norm[2];
+			}
+			return function() {
+				buffer.remove(index);
+			}
 		}
 		
-		// Returns a function like 'push', but with parameters
-		// like those expected by a matter renderer's 'push' function.
-		this.prototype.pushMatter = function() {
+		// Adds a matter leaf node to the scene, returning a function to later remove it.
+		this.prototype.pushMatterLeaf = function(leaf, scale, offset) {
+			if (leaf.substance instanceof Substance.Solid) {
+				var s = leaf.substance;
+				var h = scale * 0.5;
+				var nnn = [offset[0] - h, offset[1] - h, offset[2] - h];
+				var pnn = [offset[0] + h, offset[1] - h, offset[2] - h];
+				var npn = [offset[0] - h, offset[1] + h, offset[2] - h];
+				var ppn = [offset[0] + h, offset[1] + h, offset[2] - h];
+				var nnp = [offset[0] - h, offset[1] - h, offset[2] + h];
+				var pnp = [offset[0] + h, offset[1] - h, offset[2] + h];
+				var npp = [offset[0] - h, offset[1] + h, offset[2] + h];
+				var ppp = [offset[0] + h, offset[1] + h, offset[2] + h];
+				var xp = this.push(s.getFaceMaterial(0, false), pnn, ppn, ppp, pnp, [1, 0, 0]);
+				var xn = this.push(s.getFaceMaterial(0, false), nnp, npp, npn, nnn, [-1, 0, 0]);
+				var yp = this.push(s.getFaceMaterial(0, false), npn, npp, ppp, ppn, [0, 1, 0]);
+				var yn = this.push(s.getFaceMaterial(0, false), pnn, pnp, nnp, nnn, [0, -1, 0]);
+				var zp = this.push(s.getFaceMaterial(0, false), nnp, pnp, ppp, npp, [0, 0, 1]);
+				var zn = this.push(s.getFaceMaterial(0, false), npn, ppn, pnn, nnn, [0, 0, -1]);
+				return combine([xp, xn, yp, yn, zp, zn]);
+			} else return ignore;
+		}
+		
+		// Gets a push function for a rectangular area on a surface
+		// given the normal axis of the surface, its flip, and its
+		// position along the normal axis.
+		this.prototype.getPushSurfaceQuad = function(axis, flip, pos) {
 			var scene = this;
-			return function(mat, rect, axis, flip, pos) {
-				var proj = Global.Surface.Slice[axis].project;
+			var norm = new Array(3);
+			norm[0] = norm[1] = norm[2] = 0.0;
+			norm[axis] = flip ? -1.0 : 1.0;
+			var proj = Global.Surface.Slice[axis].project;
+			return function(material, rect) {
 				var a = proj(rect.min, pos);
 				var b = proj([rect.max[0], rect.min[1]], pos);
 				var c = proj([rect.min[0], rect.max[1]], pos);
@@ -498,18 +350,23 @@ var Render = new function() {
 					b = c;
 					c = temp;
 				}
-				var norm = new Array(3);
-				norm[0] = norm[1] = norm[2] = 0.0;
-				norm[axis] = flip ? -1.0 : 1.0;
-				return scene.push(mat, a, b, c, d, norm);
+				return scene.push(material, a, b, c, d, norm);
 			}
 		}
 		
-		// Removes the Quad with the given reference from this scene.
-		this.prototype.remove = function(ref) {
-			if (ref) ref.buffer.remove(ref.index);
+		// Gets a push function for a surface leaf node given
+		// the normal axis of the surface, its flip, and its
+		// position along the normal axis.
+		this.prototype.getPushSurfaceLeaf = function(axis, flip, pos) {
+			pushSurfaceQuad = this.getPushSurfaceQuad(axis, flip, pos);
+			return function(leaf, scale, offset) {
+				if (leaf.material !== Material.empty) {
+					var rect = Rect.unit.transform(scale, offset);
+					return pushSurfaceQuad(leaf.material, rect);
+				} else return ignore;
+			}
 		}
-		
+	
 		// Flushes all buffers for this scene. This must be called when changes
 		// are made to its contents.
 		this.prototype.flush = function() {
@@ -517,6 +374,9 @@ var Render = new function() {
 				buffer.flush();
 			});
 		}
+		
+		// TODO: Sort primitives to improve transparency quality and 
+		// reduce unnecessary overwrite.
 		
 		// Renders the contents of this Scene.
 		this.prototype.render = function(proj, view, scale) {
@@ -549,7 +409,6 @@ var Render = new function() {
 	}).call(Scene);
 	
 	// Define exports.
-	this.Surface = Surface;
-	this.Matter = Matter;
+	this.Direct = Direct;
 	this.Scene = Scene;
 };

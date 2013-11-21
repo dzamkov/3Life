@@ -89,6 +89,16 @@ function requestImage(url) {
 // references to objects I define at the global scope.
 var Global = this;
 
+// A function that does nothing.
+function ignore() { }
+
+// Combines a set of actions (parameterless functions) into one action.
+function combine(actions) {
+	actions = actions.filter(function(action) { return action !== ignore; });
+	if (actions.length == 0) return ignore;
+	return function() { for(var i = 0; i < actions.length; i++) { actions[i](); } };
+}
+
 // Correct modulo for negative numbers.
 Number.prototype.mod = function(n) {
 	return ((this % n) + n) % n;

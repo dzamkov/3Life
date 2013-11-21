@@ -1,6 +1,6 @@
 precision mediump float;
 uniform vec4 color;
-uniform float scale; 
+uniform float scale;
 varying vec3 fpos;
 varying vec3 fnorm;
 void main(void) {

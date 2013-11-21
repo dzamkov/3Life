@@ -4,9 +4,9 @@ function init() {
 	canvas = document.getElementById('canvas');
 	gl = canvas.getContext('experimental-webgl');
 
-	automataNode = Gol.nextInPlace(Gol.test, 0, Gol.test.depth, 30);
+	automataNode = Gol.nextInPlace(Gol.test, 0, Gol.test.depth, 0);
 	scene = new Render.Scene();
-	renderer = new Render.Matter.Complex(scene.pushMatter(), scene.remove);
+	renderer = new Render.Direct(Volume, scene.pushMatterLeaf.bind(scene));
 	renderer.set(matterNode = Gol.getMatter(automataNode));
 	scene.flush();
 	
@@ -49,10 +49,10 @@ function init() {
 		requestAnimationFrame(animate);
 	})();
 	
-	/*setInterval(function() {
-		automataNode = Gol.nextInPlace(automataNode, 0, automataNode.depth, 5);
-		renderer.reset(matterNode = Gol.getMatter(automataNode));
-	}, 2000);*/
+	setInterval(function() {
+		automataNode = Gol.nextInPlace(automataNode, 0, automataNode.depth, 1);
+		renderer.update(matterNode = Gol.getMatter(automataNode));
+	}, 300);
 }
 
 function onResize() {

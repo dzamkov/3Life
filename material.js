@@ -1,4 +1,3 @@
-
 // Describes a shader independently from a graphics context.
 function Shader(source, type) {
 	this.source = source;

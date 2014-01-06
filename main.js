@@ -1,10 +1,11 @@
 var canvas, scene, renderer, automataNode, matterNode;
+var movement;
 window.addEventListener('load', init, false);
 function init() {
 	canvas = document.getElementById('canvas');
 	gl = canvas.getContext('experimental-webgl');
 
-	automataNode = Gol.nextInPlace(Gol.test, 0, Gol.test.depth, 0);
+	automataNode = Gol.nextInPlace(Gol.test, 0, Gol.test.depth, 10);
 	scene = new Render.Scene();
 	renderer = new Render.Direct(Volume, scene.pushMatterLeaf.bind(scene));
 	renderer.set(matterNode = Gol.getMatter(automataNode));
@@ -15,11 +16,11 @@ function init() {
 	
 	onResize();
 	window.addEventListener('resize', onResize, false);
-	window.addEventListener('keyup', onKeyUp, false);
-	window.addEventListener('keydown', onKeyDown, false);
 	canvas.addEventListener('mousemove', onMouseMove, false);
 	canvas.addEventListener('mousedown', onMouseDown, false);
 	canvas.addEventListener('mousewheel', onMouseWheel, false);
+	
+	movement = Input.Signal.wasd.link(canvas);
 	
 	canvas.requestPointerLock = canvas.requestPointerLock ||
 		canvas.mozRequestPointerLock ||
@@ -48,11 +49,6 @@ function init() {
 		onUpdateFrame(1 / 60.0);
 		requestAnimationFrame(animate);
 	})();
-	
-	setInterval(function() {
-		automataNode = Gol.nextInPlace(automataNode, 0, automataNode.depth, 1);
-		renderer.update(matterNode = Gol.getMatter(automataNode));
-	}, 300);
 }
 
 function onResize() {
@@ -75,15 +71,6 @@ function onMouseMove(event) {
 function onMouseDown() {
 	canvas.requestFullScreen(canvas.ALLOW_KEYBOARD_INPUT);
 	canvas.requestPointerLock();
-}
-
-var keyState = new Array();
-function onKeyDown(event) {
-	keyState[event.keyCode] = true;
-}
-
-function onKeyUp(event) {
-	keyState[event.keyCode] = false;
 }
 
 var zoom = 0.0;
@@ -121,12 +108,11 @@ function onUpdateFrame(delta) {
 		Math.cos(eyeYaw) * Math.cos(eyePitch),
 		Math.sin(eyeYaw) * Math.cos(eyePitch),
 		Math.sin(eyePitch)]);
-	var eyeLeft = vec3.cross([0, 0, 1], eyeDir);
-	var move = 0.8 * (lastDis + 0.05) * delta;
-	if (keyState[37] || keyState[65]) vec3.add(eyePos, vec3.scale(eyeLeft, move));
-	if (keyState[39] || keyState[68]) vec3.subtract(eyePos, vec3.scale(eyeLeft, move));
-	if (keyState[38] || keyState[87]) vec3.add(eyePos, vec3.scale(eyeDir, move));
-	if (keyState[40] || keyState[83]) vec3.subtract(eyePos, vec3.scale(eyeDir, move));
+	var eyeRight = vec3.cross(vec3.create(eyeDir), [0, 0, 1]);
+	var moveDir = movement();
+	var moveScale = 0.8 * (lastDis + 0.05) * delta;
+	vec3.add(eyePos, vec3.scale(eyeRight, moveDir[0] * moveScale));
+	vec3.add(eyePos, vec3.scale(eyeDir, moveDir[1] * moveScale));
 	function pred(node) { return node !== Matter.empty; }
 	for (var i = 0; i < 3; i++) {
 		var Vector = Volume.Vector;

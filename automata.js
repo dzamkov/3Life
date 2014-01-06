@@ -132,9 +132,9 @@ function Automata(rule) {
 						var b = x | (y << 2) | (z << 4);
 						
 						// TODO: 8 of 27 calls to merge here are unnecessary.
-						n[x + (y * 3) + (z * 9)] = next(Node.merge(
+						n[x + (y * 3) + (z * 9)] = next(Node.get([
 							s[b], s[b + 1], s[b + 4], s[b + 5],
-							s[b + 16], s[b + 17], s[b + 20], s[b + 21]),
+							s[b + 16], s[b + 17], s[b + 20], s[b + 21]]),
 							fdepth, fiters);
 					}
 				}
@@ -146,9 +146,9 @@ function Automata(rule) {
 			var t = new Array(8);
 			for (var i = 0; i < 8; i++) {
 				var b = (i & 1) + (((i & 2) >> 1) * 3) + (((i & 4) >> 2) * 9);
-				t[i] = next(Node.merge(
+				t[i] = next(Node.get([
 					n[b], n[b + 1], n[b + 3], n[b + 4],
-					n[b + 9], n[b + 10], n[b + 12], n[b + 13]),
+					n[b + 9], n[b + 10], n[b + 12], n[b + 13]]),
 					sdepth, siters);
 			}
 			
@@ -231,4 +231,4 @@ Gol.getMatter = function(node) {
 	});
 }
 Gol.getMatter.dead = Matter.empty;
-Gol.getMatter.live = Matter.color(0.1, 0.5, 0.9);
+Gol.getMatter.live = Matter.texture(Texture.cell, false); // Matter.color(0.1, 0.5, 0.9);

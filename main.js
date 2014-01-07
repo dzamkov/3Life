@@ -51,6 +51,14 @@ function init() {
 	})();
 }
 
+function registerUpdateListener(listener) {
+
+}
+
+function registerRenderListener(listener) {
+
+}
+
 function onResize() {
 	canvas.width = window.innerWidth;
 	canvas.height = window.innerHeight;
@@ -115,12 +123,10 @@ function onUpdateFrame(delta) {
 	vec3.add(eyePos, vec3.scale(eyeDir, moveDir[1] * moveScale));
 	function pred(node) { return node !== Matter.empty; }
 	for (var i = 0; i < 3; i++) {
-		var Vector = Volume.Vector;
 		var near = Volume.nearTransformed(pred, matterNode, 1.0, [0.0, 0.0, 0.0], eyePos, maxDis);
 		lastDis = near ? near.dis : maxDis;
 		if (near && near.dis < minDis) {
-			Vector.scale(near.norm, minDis - near.dis);
-			vec3.add(eyePos, near.norm);
+			eyePos = Vec3.add(eyePos, Vec3.scale(near.norm, minDis - near.dis));
 		} else break;
 	}
 }

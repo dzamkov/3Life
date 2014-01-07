@@ -191,7 +191,7 @@ var Render = new function() {
 		this.tree = null;
 		this.pushLeaf = pushLeaf;
 		this.scale = scale || 1.0;
-		this.offset = offset || Space.Vector.zero();
+		this.offset = offset || Space.Vector.zero;
 	}
 	
 	// Define 'Direct' functions.

@@ -8,59 +8,73 @@ function Space(dimension) {
 	// Contains functions and values related to vectors.
 	var Vector = new function() {
 	
-		// Creates a new zero vector.
-		function zero() {
-			var vec = new Array(dimension);
-			for (var i = 0; i < dimension; i++) {
-				vec[i] = 0.0;
-			}
-			return vec;
+		// The zero vector.
+		var zero = new Array(dimension);
+		for (var i = 0; i < dimension; i++) {
+			zero[i] = 0.0;
 		}
-	
-		// Creates a vector from the given components.
+		
+		// Create named unit vectors.
+		for (var i = 0; i < dimension; i++) {
+			var vec = new Array(dimension);
+			for (var j = 0; j < dimension; j++) {
+				vec[j] = (i == j) ? 1.0 : 0.0;
+			}
+			this[axis[i]] = vec;
+		}
+		
+		// Creates a vector from its components.
 		function create(components) {
-			var vec = new Array(dimension);
+			var res = new Array(dimension);
 			for (var i = 0; i < dimension; i++) {
-				vec[i] = components[i];
+				res[i] = components[i];
 			}
-			return vec;
+			return res;
 		}
 		
-		// Adds a vector to another.
+		// Adds two vectors together.
 		function add(a, b) {
+			var res = new Array(dimension);
 			for (var i = 0; i < dimension; i++) {
-				a[i] += b[i];
+				res[i] = a[i] + b[i];
 			}
+			return res;
 		}
 		
-		// Subtracts a vector from another.
+		// Subtracts two vectors.
 		function sub(a, b) {
+			var res = new Array(dimension);
 			for (var i = 0; i < dimension; i++) {
-				a[i] -= b[i];
+				res[i] = a[i] - b[i];
 			}
+			return res;
 		}
 		
 		// Scales a vector by a given amount.
 		function scale(vec, amt) {
+			var res = new Array(dimension);
 			for (var i = 0; i < dimension; i++) {
-				vec[i] *= amt;
+				res[i] = vec[i] * amt;
 			}
+			return res;
 		}
 		
 		// Computes the absolute values of all components of a vector.
 		function abs(vec) {
+			var res = new Array(dimension);
 			for (var i = 0; i < dimension; i++) {
-				vec[i] = Math.abs(vec[i]);
+				res[i] = Math.abs(vec[i]);
 			}
+			return res;
 		}
 		
 		// Computes the length of a vector.
-		function length(vec) {
-			var len = 0;
+		function len(vec) {
+			var sqrLen = 0;
 			for (var i = 0; i < dimension; i++) {
-				len += vec[i] * vec[i];
+				sqrLen += vec[i] * vec[i];
 			}
-			return Math.sqrt(len);
+			return Math.sqrt(sqrLen);
 		}
 	
 		// Define exports.
@@ -70,7 +84,7 @@ function Space(dimension) {
 		this.sub = sub;
 		this.abs = abs;
 		this.scale = scale;
-		this.length = length;
+		this.len = len;
 	}
 	
 	// Describes an orthogonal hypervolume using a min and
@@ -388,10 +402,7 @@ function Space(dimension) {
 	// Gets the offset for a child node of the given index of
 	// a parent node with the given scale and offset.
 	function getOffset(scale, offset, index) {
-		var nOffset = Vector.create(offsets[index]);
-		Vector.scale(nOffset, scale);
-		Vector.add(nOffset, offset);
-		return nOffset;
+		return Vector.add(Vector.scale(offsets[index], scale), offset);
 	}
 	
 	// Define module exports.
@@ -412,6 +423,8 @@ function Space(dimension) {
 var Area = Space(2);
 var Volume = Space(3);
 var Rect = Area.Bound;
+var Vec2 = Area.Vector;
+var Vec3 = Volume.Vector;
 
 // Define Volume-specific functions.
 (function() {
@@ -420,6 +433,14 @@ var Rect = Area.Bound;
 	var Vector = this.Vector;
 	var Permutation = this.Permutation;
 	var offsets = this.offsets;
+	
+	// Gets the cross product of two vectors.
+	function cross(a, b) {
+		return [
+			a[1] * b[2] - a[2] * b[1],
+			a[2] * b[0] - a[0] * b[2],
+			a[0] * b[1] - a[1] * b[0]];
+	}
 
 	// Gets the permutation that sorts the components of the given vector.
 	function sort(vec) {
@@ -445,7 +466,7 @@ var Rect = Area.Bound;
 			}
 		}
 	}
-
+	
 	// Gets the point nearest to the given position that is on a leaf node which
 	// satisfies the given predicate. Also returns the normal at that point, and the
 	// signed distance to the point. Returns null if the node is completely empty. 
@@ -458,8 +479,7 @@ var Rect = Area.Bound;
 			if (!pred(node)) {
 				return null;
 			} else {
-				var abs = Vector.create(pos);
-				Vector.abs(abs);
+				var abs = Vec3.abs(pos);
 				
 				// Find the permutation thats sorts the components of 'abs'.
 				var perm = Permutation.sort(abs);
@@ -470,8 +490,8 @@ var Rect = Area.Bound;
 				
 					// Nearest to a face.
 					var dis = abs[2] - 0.5;
-					var point = Vector.create(pos);
-					var norm = Vector.zero();
+					var point = Vec3.create(pos);
+					var norm = Vec3.create(Vec3.zero);
 					if (point[perm[2]] > 0.0) {
 						point[perm[2]] = 0.5;
 						norm[perm[2]] = 1.0;
@@ -485,25 +505,21 @@ var Rect = Area.Bound;
 					// Nearest to an edge.
 					abs[1] -= 0.5; abs[2] -= 0.5;
 					var dis = Math.sqrt(abs[1] * abs[1] + abs[2] * abs[2]);
-					var point = Vector.create(pos);
+					var point = Vec3.create(pos);
 					point[perm[1]] = (point[perm[1]] > 0.0) ? 0.5 : -0.5;
 					point[perm[2]] = (point[perm[2]] > 0.0) ? 0.5 : -0.5;
-					var norm = Vector.create(pos);
-					Vector.sub(norm, point);
-					Vector.scale(norm, 1.0 / dis);
+					var norm = Vec3.scale(Vec3.sub(pos, point), 1.0 / dis);
 					return { dis : dis, point : point, norm : norm };
 				} else {
 				
 					// Nearest to a corner.
 					abs[0] -= 0.5; abs[1] -= 0.5; abs[2] -= 0.5;
-					var dis = Vector.length(abs);
-					var point = Vector.create(pos);
+					var dis = Vec3.len(abs);
+					var point = Vec3.create(pos);
 					point[0] = (point[0] > 0.0) ? 0.5 : -0.5;
 					point[1] = (point[1] > 0.0) ? 0.5 : -0.5;
 					point[2] = (point[2] > 0.0) ? 0.5 : -0.5;
-					var norm = Vector.create(pos);
-					Vector.sub(norm, point);
-					Vector.scale(norm, 1.0 / dis);
+					var norm = Vec3.scale(Vec3.sub(pos, point), 1.0 / dis);
 					return { dis : dis, point : point, norm : norm };
 				}
 			}
@@ -520,21 +536,13 @@ var Rect = Area.Bound;
 		
 			// Finds the nearest point to a child of the given node.
 			function nearChild(pred, node, index, pos, max) {
-				var nPos = Vector.create(pos);
-				Vector.sub(nPos, offsets[index]);
-				Vector.scale(nPos, 2.0);
-				var res = near(pred, node.children[index], nPos, max * 2.0);
-				if (res !== null) {
-					res.dis *= 0.5;
-					Vector.scale(res.point, 0.5);
-					Vector.add(res.point, offsets[index]);
-				}
-				return res;
+				return nearTransformed(pred, node.children[index],
+					0.5, offsets[index], pos, max * 2.0);
 			}
 			
 			// Check if the node is within the range specified by 'max'. Approximate
 			// the node as a sphere to hurry this up.
-			if (isFinite(max) && Vector.length(pos) > max + 0.8660254) {
+			if (isFinite(max) && Vec3.len(pos) > max + 0.8660254) {
 				return null;
 			}
 			
@@ -562,19 +570,17 @@ var Rect = Area.Bound;
 	// Like 'near', but allows the position and size (edge-length) of the
 	// node to be chosen.
 	function nearTransformed(pred, node, size, offset, pos, max) {
-		var nPos = Vector.create(pos);
-		Vector.sub(nPos, offset);
-		Vector.scale(nPos, 1.0 / size);
+		var nPos = Vec3.scale(Vec3.sub(pos, offset), 1.0 / size);
 		var res = near(pred, node, nPos, max / size);
 		if (res !== null) {
 			res.dis *= size;
-			Vector.scale(res.point, size);
-			Vector.add(res.point, offset);
+			res.point = Vec3.add(Vec3.scale(res.point, size), offset);
 		}
 		return res;
 	}
 
 	// Define exports.
+	this.Vector.cross = cross;
 	this.Permutation.sort = sort;
 	this.near = near;
 	this.nearTransformed = nearTransformed;

@@ -3,7 +3,7 @@
 // can accept and remove items between draws.
 function StreamingArrayBuffer(itemSize, initialCapacity) {
 	this.data = new Float32Array(itemSize * initialCapacity);
-	this.source = gl.createBuffer();
+	this.source = null;
 	this.sourceHasData = false;
 	this.needFlush = true;
 	this.itemSize = itemSize;
@@ -96,10 +96,11 @@ function StreamingArrayBuffer(itemSize, initialCapacity) {
 	// Synchronizes the state of the buffer with the graphics device. This should
 	// be called some time before the draw call after there was an edit to the items
 	// in the buffer.
-	this.prototype.flush = function() {
+	this.prototype.flush = function(gl) {
 		if (!this.needFlush) return;
 		this.drawLength = 0;
 		this.needFlush = false;
+		if (!this.source) this.source = gl.createBuffer();
 		gl.bindBuffer(gl.ARRAY_BUFFER, this.source);
 		if (!this.sourceHasData) {
 			gl.bufferData(gl.ARRAY_BUFFER, this.data, gl.STREAM_DRAW);
@@ -157,13 +158,13 @@ function StreamingArrayBuffer(itemSize, initialCapacity) {
 	}
 
 	// Binds this StreamingArrayBuffer.
-	this.prototype.bind = function() {
+	this.prototype.bind = function(gl) {
 		gl.bindBuffer(gl.ARRAY_BUFFER, this.source);
 	}
 	
 	// Draws all items in this StreamingArrayBuffer, assuming that
 	// the buffer is already bound.
-	this.prototype.draw = function(mode, vertexSize) {
+	this.prototype.draw = function(gl, mode, vertexSize) {
 		gl.drawArrays(mode, 0, vertexSize * this.drawLength);
 	}
 	
@@ -279,7 +280,7 @@ var Render = new function() {
 	
 		// Gets the buffer in this scene for the given material.
 		this.prototype.lookupBuffer = function(material) {
-			return scene.buffers.lookup(material, function() {
+			return this.buffers.lookup(material, function() {
 				return new StreamingArrayBuffer(36, 100);
 			});
 		}
@@ -369,9 +370,9 @@ var Render = new function() {
 	
 		// Flushes all buffers for this scene. This must be called when changes
 		// are made to its contents.
-		this.prototype.flush = function() {
+		this.prototype.flush = function(gl) {
 			this.buffers.forEach(function(_, buffer) {
-				buffer.flush();
+				buffer.flush(gl);
 			});
 		}
 		
@@ -379,7 +380,7 @@ var Render = new function() {
 		// reduce unnecessary overwrite.
 		
 		// Renders the contents of this Scene.
-		this.prototype.render = function(proj, view, scale) {
+		this.prototype.render = function(gl, proj, view, scale) {
 			this.buffers.forEach(function(mat, buffer) {
 				var procedure = mat.procedure;
 				if (procedure.hasValue) {
@@ -394,12 +395,12 @@ var Render = new function() {
 					gl.uniformMatrix4fv(program.view, false, view);
 					gl.uniform1f(program.scale, scale);
 					procedure.setUniforms(program, gl);
-					buffer.bind();
+					buffer.bind(gl);
 					gl.enableVertexAttribArray(program.pos);
 					gl.enableVertexAttribArray(program.norm);
 					gl.vertexAttribPointer(program.pos, 3, gl.FLOAT, false, 6 * 4, 0);
 					gl.vertexAttribPointer(program.norm, 3, gl.FLOAT, false, 6 * 4, 3 * 4);
-					buffer.draw(gl.TRIANGLES, 6);
+					buffer.draw(gl, gl.TRIANGLES, 6);
 					gl.disableVertexAttribArray(program.pos);
 					gl.disableVertexAttribArray(program.norm);
 					gl.disable(gl.BLEND);

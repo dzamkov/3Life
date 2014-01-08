@@ -2,33 +2,17 @@ var canvas, scene, renderer, automataNode, matterNode;
 var movement;
 window.addEventListener('load', init, false);
 function init() {
-	canvas = document.getElementById('canvas');
-	gl = canvas.getContext('experimental-webgl');
-
-	automataNode = Gol.nextInPlace(Gol.test, 0, Gol.test.depth, 10);
-	scene = new Render.Scene();
-	renderer = new Render.Direct(Volume, scene.pushMatterLeaf.bind(scene));
-	renderer.set(matterNode = Gol.getMatter(automataNode));
-	scene.flush();
+	var canvas = document.getElementById('canvas');
+	var automataNode = Gol.nextInPlace(Gol.test, 0, Gol.test.depth, 10);
+	var matterNode = Gol.getMatter(automataNode);
+	var editor = Editor.create(canvas, matterNode, Editor.defaultInputs);
 	
-	gl.enable(gl.CULL_FACE);
-	gl.enable(gl.DEPTH_TEST);
-	
-	onResize();
-	window.addEventListener('resize', onResize, false);
-	canvas.addEventListener('mousemove', onMouseMove, false);
-	canvas.addEventListener('mousedown', onMouseDown, false);
-	canvas.addEventListener('mousewheel', onMouseWheel, false);
-	
-	movement = Input.Signal.wasd.link(canvas);
-	
-	canvas.requestPointerLock = canvas.requestPointerLock ||
-		canvas.mozRequestPointerLock ||
-		canvas.webkitRequestPointerLock;
-	
-	canvas.requestFullScreen = canvas.requestFullScreen ||
-		canvas.webkitRequestFullScreen || 
-		canvas.mozRequestFullScreen;
+	var resize = function() {
+		canvas.width = window.innerWidth;
+		canvas.height = window.innerHeight;
+	}
+	window.addEventListener('resize', resize);
+	resize();
 	
 	var lastTime = new Date().getTime();
 	var elapsedTime = 0.0;
@@ -45,18 +29,10 @@ function init() {
 			elapsedTime -= 1.0;
 			elapsedFrames = 0;
 		}
-		onRenderFrame();
-		onUpdateFrame(1 / 60.0);
+		Callback.invoke(Callback.render);
+		Callback.invoke(Callback.update, 1.0 / 60.0);
 		requestAnimationFrame(animate);
 	})();
-}
-
-function registerUpdateListener(listener) {
-
-}
-
-function registerRenderListener(listener) {
-
 }
 
 function onResize() {

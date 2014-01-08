@@ -235,11 +235,19 @@ function Space(dimension) {
 		// constructed, but don't ask how I know this).
 		var id = perms[0];
 		
+		// Determines whether the given array is like the given permutation.
+		function like(p, a) {
+			for (var j = 0; j < a.length; j++) {
+				if (a[j] != p[j]) return false;
+			}
+			return true;
+		}
+		
 		// Gets the permutation like the given array.
 		function get(p) {
 			for (var i = 0; i < perms.length; i++) {
 				var a = perms[i];
-				if (p.equals(a)) return a;
+				if (like(p, a)) return a;
 			}
 		}
 		

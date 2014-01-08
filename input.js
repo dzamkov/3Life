@@ -5,16 +5,15 @@ var Input = new function() {
 	// may be associated with arbitrary data. Each trigger contains 
 	// a function 'link' which, when given an element and an event 
 	// handler, will pair the event handler with the associated input
-	// event on the element. The function will return another function
-	// which can be called to later disable the event handler.
+	// event on the element.
 	function Trigger() {
 		this.link = null;
 	}
 	
 	// An element-independent description of an input signal (a continuous
 	// source of arbitrary data). Each signal contains a function 'link' which,
-	// when given an element, will return a function which can be called to
-	// get the current value of the signal for that element.
+	// when given an element will return a function to get the current value
+	// of the signal for the element.
 	function Signal() {
 		this.link = null;
 	}
@@ -35,15 +34,11 @@ var Input = new function() {
 		// Define 'AnyKey' methods and values.
 		(function() {
 			this.prototype = Object.create(Base);
-			this.prototype.link = function(element, handler) {
+			this.prototype.link = function(element, handler, undo) {
 				var listener = function(eventData) {
 					handler(eventData.keyCode);
 				};
-				var eventName = this.eventName;
-				element.addEventListener(eventName, listener);
-				return function() {
-					element.removeEventListener(eventName, listener);
-				};
+				Event.register(element, this.eventName, listener, undo);
 			};
 			this.down = new AnyKey(true);
 			this.up = new AnyKey(false);
@@ -62,15 +57,11 @@ var Input = new function() {
 		// Define 'AnyMouseButton' methods and values.
 		(function() {
 			this.prototype = Object.create(Base);
-			this.prototype.link = function(element, handler) {
+			this.prototype.link = function(element, handler, undo) {
 				var listener = function(eventData) {
 					handler(eventData.button);
 				};
-				var eventName = this.eventName;
-				element.addEventListener(eventName, listener);
-				return function() {
-					element.removeEventListener(eventName, listener);
-				};
+				Event.register(element, this.eventName, listener, undo);
 			};
 			this.down = new AnyMouseButton(true);
 			this.up = new AnyMouseButton(false);
@@ -89,11 +80,11 @@ var Input = new function() {
 		// Define 'When' methods.
 		(function() {
 			this.prototype = Object.create(Base);
-			this.prototype.link = function(element, handler) {
-				var shouldPass = this.signal.link(element);
-				return this.source.link(element, function(data) {
+			this.prototype.link = function(element, handler, undo) {
+				var shouldPass = this.signal.link(element, undo);
+				this.source.link(element, function(data) {
 					if (shouldPass()) handler(data);
-				});
+				}, undo);
 			};
 		}).call(When);
 		
@@ -112,11 +103,11 @@ var Input = new function() {
 		// Define 'Specific' methods.
 		(function() {
 			this.prototype = Object.create(Base);
-			this.prototype.link = function(element, handler) {
+			this.prototype.link = function(element, handler, undo) {
 				var target = this.target;
-				return this.source.link(element, function(data) {
+				this.source.link(element, function(data) {
 					if (data === target) handler(data);
-				});
+				}, undo);
 			};
 		}).call(Specific);
 		
@@ -161,7 +152,7 @@ var Input = new function() {
 		// Define 'Key' methods.
 		(function() {
 			this.prototype = Object.create(Base);
-			this.prototype.link = function(element) {
+			this.prototype.link = function(element, undo) {
 				if (!element.keyStates) {
 					var keyStates = element.keyStates = new Array();
 					element.addEventListener('keydown', function(eventData) {
@@ -195,11 +186,11 @@ var Input = new function() {
 		// Define 'Compass' methods.
 		(function() {
 			this.prototype = Object.create(Base);
-			this.prototype.link = function(element) {
-				var xn = this.xn.link(element);
-				var xp = this.xp.link(element);
-				var yn = this.yn.link(element);
-				var yp = this.yp.link(element);
+			this.prototype.link = function(element, undo) {
+				var xn = this.xn.link(element, undo);
+				var xp = this.xp.link(element, undo);
+				var yn = this.yn.link(element, undo);
+				var yp = this.yp.link(element, undo);
 				var mag = this.mag;
 				return function() {
 					var res = [xp() - xn(), yp() - yn()];
@@ -225,6 +216,15 @@ var Input = new function() {
 			Key.create(83),
 			Key.create(87),
 			1.0);
+			
+		// A signal which returns a 2-vector that describes the
+		// direction of movement of the IJKL keys.
+		var ijkl = Compass.create(
+			Key.create(74),
+			Key.create(76),
+			Key.create(75),
+			Key.create(73),
+			1.0);
 	
 		// Define exports.
 		this.Key = Key;
@@ -232,9 +232,26 @@ var Input = new function() {
 		this.Compass = Compass;
 		this.compass = Compass.create;
 		this.wasd = wasd;
+		this.ijkl = ijkl;
 	}).call(Signal);
+	
+	// Links a named set of triggers and signals to a control. For each
+	// trigger, the corresponding handler in the second argument is linked.
+	// This function returns the named set of getter functions for the signals.
+	function link(inputs, control, handlers, undo) {
+		var getters = { };
+		for (name in inputs) {
+			if (name in handlers) {
+				inputs[name].link(control, handlers[name], undo);
+			} else {
+				getters[name] = inputs[name].link(control, undo);
+			}
+		}
+		return getters;
+	}
 	
 	// Define exports.
 	this.Trigger = Trigger;
 	this.Signal = Signal;
+	this.link = link;
 }

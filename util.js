@@ -129,88 +129,71 @@ Array.prototype.add = function(other) {
 	return res;
 }
 
-// Contains functions related to equality.
+// Contains functions related to structural equality of objects. This
+// is defined as '===' for all non-array objects and recursive structural
+// equality for arrays.
 var Equality = new function() {
 
 	// Determines whether two objects are equal.
 	function equals(a, b) {
-		if (a instanceof Object) return a.equals(b);
-		return a === b;
+		if (a instanceof Array) {
+			if (b instanceof Array) {
+				if (a.length != b.length) return false;
+				for (var i = 0; i < a.length; i++) {
+					if (!equals(a[i], b[i])) return false;
+				}
+				return true;
+			} else {
+				return false;
+			}
+		} else {
+			return a === b;
+		}
 	}
+	
+	// A list of useful hash primes.
+	var primes = [
+		53, 97, 193, 389, 769,
+		1543, 3079, 6151, 12289,
+		24593, 49157, 98317];
+		
+	// The arbitrary object hash code that will be given next time one
+	// is requested.
+	var nextHash = 1987;
+	
+	// The name of the property used to store the hash code of a
+	// non-array object.
+	var hashPropertyName = "__hash__";
 	
 	// Gets the hash of an object. In order for two objects to
 	// be considered equal by the above function, they must
 	// have the same hash.
 	function hash(obj) {
-		if (obj instanceof Object) return obj.hash || obj.getHash();
-		return 0;
+		if (obj instanceof Object) {
+			if (obj instanceof Array) {
+				var h = 0;
+				for(i = 0; i < obj.length; i++) {
+					h = h + hash(obj[i]) | 0;
+					h = h * primes[i % primes.length] | 0;
+				}
+				return h;
+			} else {
+				if (hashPropertyName in obj) {
+					return obj[hashPropertyName];
+				} else {
+					var h = nextHash += 57;
+					Object.defineProperty(obj, hashPropertyName, { value : h });
+					return h;
+				}
+			}
+		} else {
+			return 0;
+		}
 	}
 
-	// Contains functions and values related to hashing.
-	var Hash = new function() {
-	
-		// A list of useful hash primes.
-		var primes = [
-			53, 97, 193, 389, 769,
-			1543, 3079, 6151, 12289,
-			24593, 49157, 98317]
-			
-		// The arbitrary hash code that will be given next time one
-		// is requested.
-		var next = 1987;
-		
-		// Returns a unique hash.
-		function unique() {
-			return next += 53;
-		}
-		
-		// Returns a hash based on the contents of an
-		// array of objects.
-		function array(items) {
-			var h = 0;
-			for(i = 0; i < items.length; i++) {
-				h = h + hash(items[i]) | 0;
-				h = h * primes[i % primes.length] | 0;
-			}
-			return h;
-		}
-		
-		// Returns a hash based on the given arguments.
-		function items() {
-			return array(arguments);
-		}
-	
-		// Define exports.
-		this.primes = primes;
-		this.unique = unique;
-		this.array = array;
-		this.items = items;
-	};
-	
-	// Define default object equality.
-	Object.prototype.getHash = function() {
-		return this.hash = Hash.unique();
-	}
-	Object.prototype.equals = function(other) {
-		return this === other;
-	}
-	
-	// Define default array equality.
-	Array.prototype.getHash = function() {
-		return Hash.array(this);
-	}
-	Array.prototype.equals = function(other) {
-		if (this.length != other.length) return false;
-		for (var i = 0; i < this.length; i++) {
-			if (!equals(this[i], other[i])) return false;
-		}
-		return true;
-	}
-	
 	// Define exports.
 	this.equals = equals;
 	this.hash = hash;
-	this.Hash = Hash;
 };
 
 // An implementation of a hashtable that associates a set of keys with values.
@@ -329,6 +312,65 @@ function HashMap(initialCapacity) {
 	}
 	
 }).call(HashMap);
+
+// Contains functions related to callbacks.
+var Callback = new function() {
+
+	// Creates a new empty callback.
+	function create() {
+		return new Array();
+	}
+	
+	// Extends a callback with a handler to be called when
+	// it is invoked. The optional 'undo' callback can be specified
+	// in order for this function to register an undo handler which
+	// will remove the handler binding when the callback is invoked.
+	// This function may be called with 'callback' as null, in which
+	// case nothing happens.
+	function register(callback, handler, undo) {
+		if (callback) {
+			callback.push(handler);
+			if (undo) {
+				undo.push(function() {
+					var index = callback.indexOf(handler);
+					if (index >= 0) {
+						callback.splice(index, 1);
+					}
+				});
+			}
+		}
+	}
+	
+	// Invokes a callback with the given arguments.
+	function invoke(callback) {
+		var args = Array.prototype.slice.call(arguments, 1);
+		for (var i = 0; i < callback.length; i++) {
+			var res = callback[i].apply(Global, args);
+			if (res) return res;
+		}
+	}
+	
+	// Common callbacks.
+	this.render = create();
+	this.update = create();
+	
+	// Define exports.
+	this.create = create;
+	this.register = register;
+	this.invoke = invoke;
+}
+
+// Contains functions related to DOM events.
+var Event = new function() {
+	
+	// Registers a listener for a DOM event, similar to 'Callback.register'.
+	this.register = function(element, name, listener, undo) {
+		element.addEventListener(element, name, listener);
+		Callback.register(undo, function() {
+			element.removeEventListener(name, listener);
+		});
+	}
+}
 
 // Creates a WebGLRenderingContext for the given canvas element.
 function createGLContext(canvas) {

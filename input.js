@@ -208,6 +208,90 @@ var Input = new function() {
 			}
 		}).call(Compass);
 		
+		// A signal which gets data from a joystick using the Javascript-joystick
+		// plugin (https://code.google.com/p/javascript-joystick/).
+		function Joystick(device, read) {
+			this.device = device;
+			this.read = read;
+		}
+		
+		// Define 'Joystick' methods.
+		(function() {
+			this.prototype = Object.create(Base);
+		
+			// Check if the plugin is available.
+			var hasPlugin = false;
+			if (navigator && navigator.plugins) {
+				for (var n = 0; n < navigator.plugins.length; n++) {
+					if (navigator.plugins[n].name.indexOf("Joystick") != -1) {
+						hasPlugin = true;
+						break;
+					}
+				}
+			}
+			
+			this.hasPlugin = hasPlugin;
+			if (hasPlugin) {
+			
+				// Create an array of controls for devices.
+				var controls = new Array();
+				function getControl(index) {
+					if (controls[index]) return controls[index];
+					var control = controls[index] = document.createElement("embed");
+					control.type = "application/x-vnd.numfum-joystick";
+					control.width  = 0;
+					control.height = 0;
+					document.body.appendChild(control);
+					control.isReady = function() {
+						if (control.setDevice) {
+							control.setDevice(index);
+							control.isReady = function() {
+								return control.isConnected();
+							};
+							return control.isConnected();
+						} else return false;
+					}
+					return control;
+				}
+				
+				// Define link method.
+				this.prototype.link = function(element, undo) {
+					var control = getControl(this.device);
+					var read = this.read;
+					return function() {
+						return control.isReady() ? read(control) : null;
+					};
+				}
+			} else {
+			
+				// Without the plugin, this is rather boring.
+				this.prototype.link = function(element, undo) {
+					return ignore;
+				}
+			}
+			this.create = function(device, read) {
+				return new Joystick(device, read);
+			}
+			
+			// Creates a 2D vector signal for a joystick XY axis.
+			this.xy = function(device) {
+				return new Joystick(device, function(control) {
+					return [
+						control.x / 32768.0 - 1.0,
+						1.0 - control.y / 32768.0];
+				});
+			}
+			
+			// Creates a 2D vector signal for a joystick RZ axis.
+			this.rz = function(device) {
+				return new Joystick(device, function(control) {
+					return [
+						control.r / 32768.0 - 1.0,
+						1.0 - control.z / 32768.0];
+				});
+			}
+		}).call(Joystick);
+		
 		// A signal which returns a 2-vector that describes the
 		// direction of movement of the WASD keys.
 		var wasd = Compass.create(
@@ -231,6 +315,8 @@ var Input = new function() {
 		this.key = Key.create;
 		this.Compass = Compass;
 		this.compass = Compass.create;
+		this.Joystick = Joystick;
+		this.joystick = Joystick.create;
 		this.wasd = wasd;
 		this.ijkl = ijkl;
 	}).call(Signal);

@@ -42,8 +42,8 @@ var Editor = new function() {
 
 	// The default input scheme for an editor.
 	this.defaultInputs = {
-		cameraMove : Input.Signal.wasd,
-		cameraRotate : Input.Signal.ijkl
+		cameraMove : Input.Signal.Joystick.xy(0),
+		cameraRotate : Input.Signal.Joystick.rz(0)
 	}
 	
 	// Creates an editor interface for a canvas.
@@ -77,13 +77,17 @@ var Editor = new function() {
 
 			// Move camera along its plane.
 			var cameraMove = signals.cameraMove();
-			var cameraMoveScale =  0.8 * (lastDis + 0.05) * delta;
-			camera = camera.move(Vec2.scale(cameraMove, cameraMoveScale));
+			if (cameraMove) {
+				var cameraMoveScale =  0.8 * (lastDis + 0.05) * delta;
+				camera = camera.move(Vec2.scale(cameraMove, cameraMoveScale));
+			}
 			
 			// Rotate camera.
 			var cameraRotate = signals.cameraRotate();
-			var cameraRotateScale = delta;
-			camera = camera.rotate(Vec2.scale(cameraRotate, cameraRotateScale), Math.PI * 0.4);
+			if (cameraRotate) {
+				var cameraRotateScale = 1.5 * delta;
+				camera = camera.rotate(Vec2.scale(cameraRotate, cameraRotateScale), Math.PI * 0.4);
+			}
 		
 			// Compute camera distance from matter in the scene.
 			function pred(node) { return node !== Matter.empty; }

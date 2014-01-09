@@ -1,5 +1,39 @@
+// Describes a graphical resource independently from a graphics
+// context.
+function Resource() {
+	this.index = Resource.nextIndex;
+	Resource.nextIndex++;
+}
+
+// Define 'Resource' functions.
+(function() {
+
+	// The index assigned to the next constructed resource.
+	this.nextIndex = 0;
+	
+	// Gets an instance of this resource for the given graphics context.
+	this.prototype.get = function(gl) {
+		if (gl.resource) {
+			var cur = gl.resource[this.index];
+			if (cur) return cur; else {
+				return gl.resource[this.index] = this.create(gl);
+			}
+		} else {
+			gl.resource = new Array(Resource.nextIndex);
+			return gl.resource[this.index] = this.create(gl);
+		}
+	}
+	
+	// Creates an instance of this resource for the given graphics context.
+	this.prototype.create = function(gl) {
+		return { };
+	}
+
+}).call(Resource);
+
 // Describes a shader independently from a graphics context.
 function Shader(source, type) {
+	Resource.call(this);
 	this.source = source;
 	this.type = type;
 }
@@ -13,22 +47,16 @@ function Shader(source, type) {
 		Fragment : WebGLRenderingContext.FRAGMENT_SHADER
 	}
 
-	// Loads the shader into a graphics context and returns a
-	// handle to it. This function caches the shader for the
-	// last used graphics context.
-	this.prototype.get = function(gl) {
-		if (this.cache && this.cache.gl === gl) {
-			return this.cache.handle;
-		} else {
-			var shader = gl.createShader(this.type);
-			gl.shaderSource(shader, this.source);
-			gl.compileShader(shader);
-			if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-				throw "Shader Compiler Error: " + gl.getShaderInfoLog(shader);
-			}
-			this.cache = { gl : gl, handle : shader };
-			return shader;
+	// Implement 'Resource'.
+	this.prototype = Object.create(Resource.prototype);
+	this.prototype.create = function(gl) {
+		var shader = gl.createShader(this.type);
+		gl.shaderSource(shader, this.source);
+		gl.compileShader(shader);
+		if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+			throw "Shader Compiler Error: " + gl.getShaderInfoLog(shader);
 		}
+		return shader;
 	}
 	
 	// Requests a shader from a url, returning a promise to be
@@ -69,32 +97,27 @@ function Shader(source, type) {
 
 // Describes a shader program independently from a graphics context.
 function Program(shaders, setup) {
+	Resource.call(this);
 	this.shaders = shaders;
 	this.setup = setup;
 }
 
 // Define 'Program' functions.
 (function() {
-
-	// Loads the program into a graphics context and returns a
-	// handle to it. This function caches the program for the
-	// last used graphics context.
-	this.prototype.get = function(gl) {
-		if (this.cache && this.cache.gl === gl) {
-			return this.cache.handle;
-		} else {
-			var program = gl.createProgram();
-			this.shaders.forEach(function(shader) {
-				gl.attachShader(program, shader.get(gl));
-			});
-			gl.linkProgram(program);
-			if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-				throw "Program Link Error: " + gl.getProgramParameter(program, gl.VALIDATE_STATUS);
-			}
-			this.setup(program, gl);
-			this.cache = { gl : gl, handle : program };
-			return program;
+	
+	// Implement 'Resource'.
+	this.prototype = Object.create(Resource.prototype);
+	this.prototype.create = function(gl) {
+		var program = gl.createProgram();
+		this.shaders.forEach(function(shader) {
+			gl.attachShader(program, shader.get(gl));
+		});
+		gl.linkProgram(program);
+		if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+			throw "Program Link Error: " + gl.getProgramParameter(program, gl.VALIDATE_STATUS);
 		}
+		this.setup(program, gl);
+		return program;
 	}
 	
 	// Creates a promise for a program given a set of promises for
@@ -154,28 +177,23 @@ function Program(shaders, setup) {
 
 // Describes a texture independently from a graphics context.
 function Texture(image) {
+	Resource.call(this);
 	this.image = image;
 }
 
 // Define 'Texture' functions.
 (function() {
-
-	// Loads the texture into a graphics context and returns a
-	// handle to it. This function caches the texture for the
-	// last used graphics context.
-	this.prototype.get = function(gl) {
-		if (this.cache && this.cache.gl === gl) {
-			return this.cache.handle;
-		} else {
-			var texture = gl.createTexture();
-			gl.bindTexture(gl.TEXTURE_2D, texture);
-			gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this.image);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_NEAREST);
-			gl.generateMipmap(gl.TEXTURE_2D);
-			this.cache = { gl : gl, handle : texture };
-			return texture;
-		}
+	
+	// Implement 'Resource'.
+	this.prototype = Object.create(Resource.prototype);
+	this.prototype.create = function(gl) {
+		var texture = gl.createTexture();
+		gl.bindTexture(gl.TEXTURE_2D, texture);
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this.image);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_NEAREST);
+		gl.generateMipmap(gl.TEXTURE_2D);
+		return texture;
 	}
 	
 	// Requests a texture from a url, returning a promise to

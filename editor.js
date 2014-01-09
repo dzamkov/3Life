@@ -90,13 +90,10 @@ var Editor = new function() {
 				indexData.push(b);
 				indexData.push(d);
 			}
-			var s = 1.0 / (1 << 6);
-			var ext = 5;
-			var e = s * ext;
-			for (var i = -ext; i <= ext; i++) {
-				var v = s * i;
-				outputLine([-e, v, 0.0], [e, v, 0.0], 0.001);
-				outputLine([v, -e, 0.0], [v, e, 0.0], 0.001);
+			var s = 10;
+			for (var i = 0; i <= s; i++) {
+				outputLine([0, i, 0], [s, i, 0], 0.05);
+				outputLine([i, 0, 0], [i, s, 0], 0.05);
 			}
 			var mesh = Mesh.create(Mesh.Mode.Triangles,
 				new Float32Array(vertexData),
@@ -116,12 +113,24 @@ var Editor = new function() {
 			var view = mat4.create();
 			mat4.multiply(mat4.perspective(45, canvas.width / canvas.height, 0.001, 2.0),
 				camera.getViewMatrix(), view);
-			scene.render(gl, view, 1.0 / (1 << node.depth));
+			
+			var scale = 1.0 / (1 << node.depth);
+			scene.render(gl, view, scale);
 			
 			var lineProgram = Program.Line.color;
 			if (lineProgram.hasValue) {
 				lineProgram = lineProgram.value.get(gl);
 				gl.useProgram(lineProgram);
+				
+				
+				var model = mat4.create();
+				mat4.identity(model);
+				mat4.translate(model, [15 * scale, 15 * scale, -17 * scale]);
+				mat4.scale(model, [scale, scale, scale]);
+				
+				
+				gl.uniformMatrix4fv(lineProgram.model, false, model);
+				gl.uniform1f(lineProgram.scale, scale);
 				gl.uniformMatrix4fv(lineProgram.view, false, view);
 				gl.uniform4f(lineProgram.color, 1.0, 0.0, 0.0, 1.0);
 				gl.uniform3fv(lineProgram.eyePos, camera.pos);

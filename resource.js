@@ -39,8 +39,11 @@ function Shader(source, type) {
 		});
 	}
 	
+	// A promise for a generic color shader.
+	this.color = request("shaders/color.glsl", Type.Fragment);
+	
 	// Contains shaders for blocks.
-	var Block = new function() {
+	this.Block = new function() {
 	
 		// A promise for a generic vertex shader.
 		this.vertex = request("shaders/block/vertex.glsl", Type.Vertex);
@@ -52,10 +55,16 @@ function Shader(source, type) {
 		this.texture = request("shaders/block/texture.glsl", Type.Fragment);
 	}
 	
+	// Contains shaders for lines.
+	this.Line = new function() {
+	
+		// A promise for a generic vertex shader.
+		this.vertex = request("shaders/line/vertex.glsl", Type.Vertex);
+	}
+	
 	// Define exports.
 	this.Type = Type;
 	this.request = request;
-	this.Block = Block;
 }).call(Shader);
 
 // Describes a shader program independently from a graphics context.
@@ -97,9 +106,9 @@ function Program(shaders, setup) {
 	}
 	
 	// Contains programs for blocks.
-	var Block = new function() {
+	this.Block = new function() {
 	
-		// Sets up the uniforms and attributes that are common between programs.
+		// Sets up the uniforms and attributes that are common between block programs.
 		function setupCommon(program, gl) {
 			program.view = gl.getUniformLocation(program, "view");
 			program.scale = gl.getUniformLocation(program, "scale");
@@ -107,22 +116,40 @@ function Program(shaders, setup) {
 			program.norm = gl.getAttribLocation(program, "norm");
 		}
 		
-		// A promise for a colored program.
+		// A promise for a colored block program.
 		this.color = request([Shader.Block.vertex, Shader.Block.color], function(program, gl) {
 			program.color = gl.getUniformLocation(program, "color");
 			setupCommon(program, gl);
 		});
 		
-		// A promise for a textured program.
+		// A promise for a textured block program.
 		this.texture = request([Shader.Block.vertex, Shader.Block.texture], function(program, gl) {
 			program.texture = gl.getUniformLocation(program, "texture");
 			setupCommon(program, gl);
 		});
 	}
 	
+	// Contains programs for lines.
+	this.Line = new function() {
+		
+		// Sets up the uniforms and attributes that are common between line programs.
+		function setupCommon(program, gl) {
+			program.view = gl.getUniformLocation(program, "view");
+			program.foward = gl.getUniformLocation(program, "foward");
+			program.pos = gl.getAttribLocation(program, "pos");
+			program.dir = gl.getAttribLocation(program, "dir");
+			program.offset = gl.getAttribLocation(program, "offset");
+		}
+		
+		// A promise for a colored line program.
+		this.color = request([Shader.Line.vertex, Shader.color], function(program, gl) {
+			program.color = gl.getUniformLocation(program, "color");
+			setupCommon(program, gl);
+		});
+	}
+	
 	// Define exports.
 	this.request = request;
-	this.Block = Block;
 }).call(Program);
 
 // Describes a texture independently from a graphics context.

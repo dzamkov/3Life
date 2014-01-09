@@ -56,6 +56,20 @@ var Editor = new function() {
 		renderer.set(node);
 		scene.flush(gl);
 		
+		// Create a test line scene.
+		var verts = new Float32Array([
+			0.0, 0.0, 0.0, 0.0, 0.0, 1.0, -0.001,
+			0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.001,
+			0.0, 0.0, 1.0, 0.0, 0.0, 1.0, -0.01,
+			0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.01]);
+		var ids = new Uint16Array([0, 1, 2, 2, 1, 3]);
+		var lineVertBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, lineVertBuffer);
+		gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW);
+		var lineIndexBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, lineIndexBuffer);
+		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, ids, gl.STATIC_DRAW);
+		
 		// Render the editor view.
 		gl.enable(gl.CULL_FACE);
 		gl.enable(gl.DEPTH_TEST);
@@ -68,6 +82,27 @@ var Editor = new function() {
 			mat4.multiply(mat4.perspective(45, canvas.width / canvas.height, 0.001, 2.0),
 				camera.getViewMatrix(), view);
 			scene.render(gl, view, 1.0 / (1 << node.depth));
+			
+			var lineProgram = Program.Line.color;
+			if (lineProgram.hasValue) {
+				lineProgram = lineProgram.value.get(gl);
+				gl.useProgram(lineProgram);
+				gl.uniformMatrix4fv(lineProgram.view, false, view);
+				gl.uniform4f(lineProgram.color, 1.0, 0.0, 0.0, 1.0);
+				gl.uniform3fv(lineProgram.foward, camera.foward);
+				gl.bindBuffer(gl.ARRAY_BUFFER, lineVertBuffer);
+				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, lineIndexBuffer);
+				gl.enableVertexAttribArray(lineProgram.pos);
+				gl.enableVertexAttribArray(lineProgram.dir);
+				gl.enableVertexAttribArray(lineProgram.offset);
+				gl.vertexAttribPointer(lineProgram.pos, 3, gl.FLOAT, false, 7 * 4, 0);
+				gl.vertexAttribPointer(lineProgram.dir, 3, gl.FLOAT, false, 7 * 4, 3 * 4);
+				gl.vertexAttribPointer(lineProgram.offset, 1, gl.FLOAT, false, 7 * 4, 6 * 4);
+				gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
+				gl.disableVertexAttribArray(lineProgram.pos);
+				gl.disableVertexAttribArray(lineProgram.dir);
+				gl.disableVertexAttribArray(lineProgram.offset);
+			}
 		}, undo);
 		
 		// Handle movement/update.

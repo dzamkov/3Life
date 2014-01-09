@@ -57,18 +57,53 @@ var Editor = new function() {
 		scene.flush(gl);
 		
 		// Create a test line scene.
-		var verts = new Float32Array([
-			0.0, 0.0, 0.0, 0.0, 0.0, 1.0, -0.001,
-			0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.001,
-			0.0, 0.0, 1.0, 0.0, 0.0, 1.0, -0.01,
-			0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.01]);
-		var ids = new Uint16Array([0, 1, 2, 2, 1, 3]);
-		var lineVertBuffer = gl.createBuffer();
-		gl.bindBuffer(gl.ARRAY_BUFFER, lineVertBuffer);
-		gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW);
-		var lineIndexBuffer = gl.createBuffer();
-		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, lineIndexBuffer);
-		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, ids, gl.STATIC_DRAW);
+		var drawLines = (function() {
+			var vertexSize = 7;
+			var attributes = {
+				pos : { size : 3, offset : 0 },
+				dir : { size : 3, offset : 3 },
+				offset : { size : 1, offset : 6 }};
+			var vertexData = new Array();
+			var indexData = new Array();
+			function outputVertex(pos, dir, offset) {
+				var index = vertexData.length;
+				vertexData.length += vertexSize;
+				vertexData[index + 0] = pos[0];
+				vertexData[index + 1] = pos[1];
+				vertexData[index + 2] = pos[2];
+				vertexData[index + 3] = dir[0];
+				vertexData[index + 4] = dir[1];
+				vertexData[index + 5] = dir[2];
+				vertexData[index + 6] = offset;
+				return index / vertexSize;
+			}
+			function outputLine(from, to, thickness) {
+				var dir = Vec3.normalize(Vec3.sub(to, from));
+				var a = outputVertex(from, dir, -thickness);
+				var b = outputVertex(from, dir, thickness);
+				var c = outputVertex(to, dir, -thickness);
+				var d = outputVertex(to, dir, thickness);
+				indexData.push(a);
+				indexData.push(b);
+				indexData.push(c);
+				indexData.push(c);
+				indexData.push(b);
+				indexData.push(d);
+			}
+			var s = 1.0 / (1 << 6);
+			var ext = 5;
+			var e = s * ext;
+			for (var i = -ext; i <= ext; i++) {
+				var v = s * i;
+				outputLine([-e, v, 0.0], [e, v, 0.0], 0.001);
+				outputLine([v, -e, 0.0], [v, e, 0.0], 0.001);
+			}
+			var mesh = Mesh.create(Mesh.Mode.Triangles,
+				new Float32Array(vertexData),
+				new Uint16Array(indexData),
+				vertexSize, attributes);
+			return mesh.create(gl);
+		})();
 		
 		// Render the editor view.
 		gl.enable(gl.CULL_FACE);
@@ -90,18 +125,7 @@ var Editor = new function() {
 				gl.uniformMatrix4fv(lineProgram.view, false, view);
 				gl.uniform4f(lineProgram.color, 1.0, 0.0, 0.0, 1.0);
 				gl.uniform3fv(lineProgram.foward, camera.foward);
-				gl.bindBuffer(gl.ARRAY_BUFFER, lineVertBuffer);
-				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, lineIndexBuffer);
-				gl.enableVertexAttribArray(lineProgram.pos);
-				gl.enableVertexAttribArray(lineProgram.dir);
-				gl.enableVertexAttribArray(lineProgram.offset);
-				gl.vertexAttribPointer(lineProgram.pos, 3, gl.FLOAT, false, 7 * 4, 0);
-				gl.vertexAttribPointer(lineProgram.dir, 3, gl.FLOAT, false, 7 * 4, 3 * 4);
-				gl.vertexAttribPointer(lineProgram.offset, 1, gl.FLOAT, false, 7 * 4, 6 * 4);
-				gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
-				gl.disableVertexAttribArray(lineProgram.pos);
-				gl.disableVertexAttribArray(lineProgram.dir);
-				gl.disableVertexAttribArray(lineProgram.offset);
+				drawLines(lineProgram);
 			}
 		}, undo);
 		

@@ -76,6 +76,11 @@ function Space(dimension) {
 			}
 			return Math.sqrt(sqrLen);
 		}
+		
+		// Normalizes a vector.
+		function normalize(vec) {
+			return scale(vec, 1.0 / len(vec));
+		}
 	
 		// Define exports.
 		this.zero = zero;
@@ -85,6 +90,7 @@ function Space(dimension) {
 		this.abs = abs;
 		this.scale = scale;
 		this.len = len;
+		this.normalize = normalize;
 	}
 	
 	// Describes an orthogonal hypervolume using a min and

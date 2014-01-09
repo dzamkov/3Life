@@ -1,18 +1,21 @@
 // Describes a graphical resource independently from a graphics
 // context.
 function Resource() {
-	this.index = Resource.nextIndex;
-	Resource.nextIndex++;
+	this.index = null;
 }
 
 // Define 'Resource' functions.
 (function() {
 
 	// The index assigned to the next constructed resource.
-	this.nextIndex = 0;
+	var nextIndex = 0;
 	
 	// Gets an instance of this resource for the given graphics context.
 	this.prototype.get = function(gl) {
+		if (this.index === null) {
+			this.index = nextIndex;
+			nextIndex++;
+		}
 		if (gl.resource) {
 			var cur = gl.resource[this.index];
 			if (cur) return cur; else {
@@ -208,3 +211,117 @@ function Texture(image) {
 	this.cell = this.request("textures/cell.png");
 
 }).call(Texture);
+
+// Describes a mesh independently from a graphics context.
+function Mesh(mode, vertexData, indexData, vertexSize, attributes) {
+	Resource.call(this);
+	this.mode = mode;
+	this.vertexData = vertexData;
+	this.indexData = indexData;
+	this.vertexSize = vertexSize;
+	this.attributes = attributes;
+}
+
+// Define 'Mesh' functions.
+(function() {
+
+	// Identifies a draw mode for a mesh.
+	var Mode = {
+		Triangles : WebGLRenderingContext.TRIANGLES
+	}
+	
+	// Enables, and sets up, the attributes for a program.
+	function enableAttributes(gl, program, attributes, vertexSize) {
+		for (name in attributes) {
+			var attribute = attributes[name];
+			var location = program[name];
+			gl.enableVertexAttribArray(location);
+			gl.vertexAttribPointer(location, attribute.size, 
+				gl.FLOAT, false, vertexSize * 4, attribute.offset * 4);
+		}
+	}
+	
+	// Disables the attributes for a program.
+	function disableAttributes(gl, program, attributes) {
+		for (name in attributes) {
+			gl.disableVertexAttribArray(program[name]);
+		}
+	}
+
+	// Implement 'Resource'.
+	this.prototype = Object.create(Resource.prototype);
+	this.prototype.create = function(gl) {
+		var mode = this.mode;
+		var attributes = this.attributes;
+		var vertexSize = this.vertexSize;
+		var vertexBuffer = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+		gl.bufferData(gl.ARRAY_BUFFER, this.vertexData, gl.STATIC_DRAW);
+		if (this.indexData) {
+			var indexBuffer = gl.createBuffer();
+			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+			gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, this.indexData, gl.STATIC_DRAW);
+			var count = this.indexData.length;
+			return function(program) {
+				gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+				enableAttributes(gl, program, attributes, vertexSize);
+				gl.drawElements(mode, count, gl.UNSIGNED_SHORT, 0);
+				disableAttributes(gl, program, attributes);
+			};
+		} else {
+			var count = this.vertexData.length / this.vertexSize;
+			return function(program) {
+				gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+				enableAttributes(gl, program, attributes, vertexSize);
+				gl.drawArrays(mode, 0, count);
+				disableAttributes(gl, program, attributes);
+			};
+		}
+	}
+	
+	// Creates a new 'Mesh' object.
+	function create(mode, vertexData, indexData, vertexSize, attributes) {
+		return new Mesh(mode, vertexData, indexData, vertexSize, attributes);
+	}
+	
+	// Creates a new 'Mesh' object given an expanded description of its contents.
+	// Both 'vertices' and 'indices' are given as simple arrays. Each item in 'vertices'
+	// is an object that maps attributes (by name) to their values (either arrays or numbers).
+	function createFromExpanded(mode, vertices, indices) {
+		var vertex = vertices[0];
+		var offset = 0;
+		var attributes = new Object();
+		for (name in vertex) {
+			var value = vertex[name];
+			var size = value instanceof Array ? value.length : 1;
+			attributes[name] = { size : size, offset : offset };
+			offset += size;
+		}
+		var vertexSize = offset;
+		var vertexData = new Float32Array(vertices.length * vertexSize);
+		var cur = 0;
+		for (var i = 0; i < vertices.length; i++) {
+			var vertex = vertices[i];
+			for (name in attributes) {
+				var attribute = attributes[name];
+				var value = vertex[name];
+				if (value instanceof Array) {
+					for (var j = 0; j < value.length; j++) {
+						vertexData[cur + attribute.offset + j] = value[j];
+					}
+				} else {
+					vertexData[cur + attribute.offset] = value;
+				}
+			}
+			cur += vertexSize;
+		}
+		var indexData = new Uint16Array(indices);
+		return create(mode, vertexData, indexData, vertexSize, attributes);
+	}
+
+	// Define exports.
+	this.Mode = Mode;
+	this.create = create;
+	this.createFromExpanded = createFromExpanded;
+}).call(Mesh);

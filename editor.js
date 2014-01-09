@@ -42,8 +42,8 @@ var Editor = new function() {
 
 	// The default input scheme for an editor.
 	this.defaultInputs = {
-		cameraMove : Input.Signal.Joystick.xy(0),
-		cameraRotate : Input.Signal.Joystick.rz(0)
+		cameraMove : Input.Signal.wasd,
+		cameraRotate : Input.Signal.ijkl
 	}
 	
 	// Creates an editor interface for a canvas.
@@ -64,9 +64,10 @@ var Editor = new function() {
 			gl.clearColor(0.0, 0.0, 0.0, 1.0);
 			gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 			
-			var proj = mat4.perspective(45, canvas.width / canvas.height, 0.001, 2.0);
-			var view = camera.getViewMatrix();
-			scene.render(gl, proj, view, 1.0 / (1 << node.depth));
+			var view = mat4.create();
+			mat4.multiply(mat4.perspective(45, canvas.width / canvas.height, 0.001, 2.0),
+				camera.getViewMatrix(), view);
+			scene.render(gl, view, 1.0 / (1 << node.depth));
 		}, undo);
 		
 		// Handle movement/update.

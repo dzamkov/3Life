@@ -8,7 +8,7 @@ function Shader(source, type) {
 (function() {
 
 	// Define types of shaders.
-	this.Type = {
+	var Type = {
 		Vertex :  WebGLRenderingContext.VERTEX_SHADER,
 		Fragment : WebGLRenderingContext.FRAGMENT_SHADER
 	}
@@ -33,21 +33,29 @@ function Shader(source, type) {
 	
 	// Requests a shader from a url, returning a promise to be
 	// fufilled once it has been downloaded.
-	this.request = function(url, type) {
+	function request(url, type) {
 		return requestText(url).map(function(source) {
 			return new Shader(source, type);
 		});
 	}
 	
-	// A promise for a generic vertex shader.
-	this.vertex = this.request("shaders/vertex.glsl", this.Type.Vertex);
+	// Contains shaders for blocks.
+	var Block = new function() {
 	
-	// A promise for a colored fragment shader.
-	this.color = this.request("shaders/color.glsl", this.Type.Fragment);
+		// A promise for a generic vertex shader.
+		this.vertex = request("shaders/block/vertex.glsl", Type.Vertex);
+		
+		// A promise for a colored fragment shader.
+		this.color = request("shaders/block/color.glsl", Type.Fragment);
+		
+		// A promise for a textured fragment shader.
+		this.texture = request("shaders/block/texture.glsl", Type.Fragment);
+	}
 	
-	// A promise for a textured fragment shader.
-	this.texture = this.request("shaders/texture.glsl", this.Type.Fragment);
-	
+	// Define exports.
+	this.Type = Type;
+	this.request = request;
+	this.Block = Block;
 }).call(Shader);
 
 // Describes a shader program independently from a graphics context.
@@ -82,33 +90,39 @@ function Program(shaders, setup) {
 	
 	// Creates a promise for a program given a set of promises for
 	// its constituent shaders and a static setup function.
-	this.request = function(shaders, setup) {
+	function request(shaders, setup) {
 		return join(shaders, function(shaders) {
 			return new Program(shaders, setup);
 		});
 	}
 	
-	// Sets up the uniforms and attributes that are common between programs.
-	function setupCommon(program, gl) {
-		program.proj = gl.getUniformLocation(program, "proj");
-        program.view = gl.getUniformLocation(program, "view");
-		program.scale = gl.getUniformLocation(program, "scale");
-		program.pos = gl.getAttribLocation(program, "pos");
-		program.norm = gl.getAttribLocation(program, "norm");
+	// Contains programs for blocks.
+	var Block = new function() {
+	
+		// Sets up the uniforms and attributes that are common between programs.
+		function setupCommon(program, gl) {
+			program.view = gl.getUniformLocation(program, "view");
+			program.scale = gl.getUniformLocation(program, "scale");
+			program.pos = gl.getAttribLocation(program, "pos");
+			program.norm = gl.getAttribLocation(program, "norm");
+		}
+		
+		// A promise for a colored program.
+		this.color = request([Shader.Block.vertex, Shader.Block.color], function(program, gl) {
+			program.color = gl.getUniformLocation(program, "color");
+			setupCommon(program, gl);
+		});
+		
+		// A promise for a textured program.
+		this.texture = request([Shader.Block.vertex, Shader.Block.texture], function(program, gl) {
+			program.texture = gl.getUniformLocation(program, "texture");
+			setupCommon(program, gl);
+		});
 	}
 	
-	// A promise for a colored program.
-	this.color = this.request([Shader.vertex, Shader.color], function(program, gl) {
-		program.color = gl.getUniformLocation(program, "color");
-		setupCommon(program, gl);
-	});
-	
-	// A promise for a textured program.
-	this.texture = this.request([Shader.vertex, Shader.texture], function(program, gl) {
-		program.texture = gl.getUniformLocation(program, "texture");
-		setupCommon(program, gl);
-	});
-
+	// Define exports.
+	this.request = request;
+	this.Block = Block;
 }).call(Program);
 
 // Describes a texture independently from a graphics context.
@@ -150,38 +164,6 @@ function Texture(image) {
 
 }).call(Texture);
 
-// Describes a procedure for rendering a material.
-function Procedure(program, setUniforms) {
-	this.program = program;
-	this.setUniforms = setUniforms;
-}
-
-// Define 'Procedure' functions.
-(function() {
-
-	// Creates a promise for a procedure to render a colored material.
-	this.color = function(mat) {
-		return Program.color.map(function(program) {
-			return new Procedure(program, function(program, gl) {
-				gl.uniform4f(program.color, mat.r, mat.g, mat.b, mat.a);
-			});
-		});
-	}
-	
-	// Creates a promise for a procedure to render a textured material,
-	// given a promise for the texture itself.
-	this.texture = function(texture) {
-		return joinArgs([Program.texture, texture], function(program, texture) {
-			return new Procedure(program, function(program, gl) {
-				gl.activeTexture(gl.TEXTURE0);
-				gl.bindTexture(gl.TEXTURE_2D, texture.get(gl));
-				gl.uniform1i(program.texture, 0);
-			});
-		});
-	}
-	
-}).call(Procedure);
-
 // Describes the visual properties of a surface. The 'procedure'
 // parameter is a promise for the procedure that renders the material.
 function Material(procedure, isTransparent) {
@@ -194,6 +176,38 @@ function Material(procedure, isTransparent) {
 
 	// The base type for materials.
 	var Base = this;
+	
+	// Describes a procedure for rendering a material.
+	function Procedure(program, setUniforms) {
+		this.program = program;
+		this.setUniforms = setUniforms;
+	}
+
+	// Define 'Procedure' functions.
+	(function() {
+
+		// Creates a promise for a procedure to render a colored material.
+		this.color = function(mat) {
+			return Program.Block.color.map(function(program) {
+				return new Procedure(program, function(program, gl) {
+					gl.uniform4f(program.color, mat.r, mat.g, mat.b, mat.a);
+				});
+			});
+		}
+		
+		// Creates a promise for a procedure to render a textured material,
+		// given a promise for the texture itself.
+		this.texture = function(texture) {
+			return joinArgs([Program.Block.texture, texture], function(program, texture) {
+				return new Procedure(program, function(program, gl) {
+					gl.activeTexture(gl.TEXTURE0);
+					gl.bindTexture(gl.TEXTURE_2D, texture.get(gl));
+					gl.uniform1i(program.texture, 0);
+				});
+			});
+		}
+		
+	}).call(Procedure);
 	
 	// Represents a solid-colored material, which will be
 	// transparent if the optional alpha parameter is specified.
@@ -223,6 +237,7 @@ function Material(procedure, isTransparent) {
 	var empty = new Base(null, true);
 	
 	// Define exports.
+	this.Procedure = Procedure;
 	this.Color = Color;
 	this.color = color;
 	this.Texture = Texture;

@@ -93,7 +93,7 @@ function Shader(source, type) {
 		this.vertex = request("shaders/line/vertex.glsl", Type.Vertex);
 		
 		// A promise for a colored fragment shader with falloff.
-		this.falloffColor = request("shaders/line/falloffColor.glsl", Type.Fragment);
+		this.colorFalloff = request("shaders/line/colorFalloff.glsl", Type.Fragment);
 	}
 	
 	// Define exports.
@@ -177,7 +177,7 @@ function Program(shaders, setup) {
 		});
 		
 		// A promise for a colored line program with falloff.
-		this.falloffColor = request([Shader.Line.vertex, Shader.Line.falloffColor], function(program, gl) {
+		this.colorFalloff = request([Shader.Line.vertex, Shader.Line.colorFalloff], function(program, gl) {
 			program.color = gl.getUniformLocation(program, "color");
 			setupCommon(program, gl);
 		});

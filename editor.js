@@ -124,7 +124,7 @@ var Editor = new function() {
 				gl.useProgram(lineProgram);
 				gl.uniformMatrix4fv(lineProgram.view, false, view);
 				gl.uniform4f(lineProgram.color, 1.0, 0.0, 0.0, 1.0);
-				gl.uniform3fv(lineProgram.foward, camera.foward);
+				gl.uniform3fv(lineProgram.eyePos, camera.pos);
 				gl.depthMask(false);
 				drawLines(lineProgram);
 				gl.depthMask(true);

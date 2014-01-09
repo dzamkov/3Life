@@ -164,7 +164,7 @@ function Program(shaders, setup) {
 		// Sets up the uniforms and attributes that are common between line programs.
 		function setupCommon(program, gl) {
 			program.view = gl.getUniformLocation(program, "view");
-			program.foward = gl.getUniformLocation(program, "foward");
+			program.eyePos = gl.getUniformLocation(program, "eyePos");
 			program.pos = gl.getAttribLocation(program, "pos");
 			program.dir = gl.getAttribLocation(program, "dir");
 			program.offset = gl.getAttribLocation(program, "offset");

@@ -126,10 +126,7 @@ var Editor = new function() {
 				gl.uniform4f(lineProgram.color, 1.0, 0.0, 0.0, 1.0);
 				gl.uniform3fv(lineProgram.foward, camera.foward);
 				gl.depthMask(false);
-				gl.enable(gl.BLEND);
-				gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
 				drawLines(lineProgram);
-				gl.disable(gl.BLEND);
 				gl.depthMask(true);
 			}
 		}, undo);

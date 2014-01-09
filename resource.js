@@ -91,6 +91,9 @@ function Shader(source, type) {
 	
 		// A promise for a generic vertex shader.
 		this.vertex = request("shaders/line/vertex.glsl", Type.Vertex);
+		
+		// A promise for a colored fragment shader.
+		this.color = request("shaders/line/color.glsl", Type.Fragment);
 	}
 	
 	// Define exports.
@@ -168,7 +171,7 @@ function Program(shaders, setup) {
 		}
 		
 		// A promise for a colored line program.
-		this.color = request([Shader.Line.vertex, Shader.color], function(program, gl) {
+		this.color = request([Shader.Line.vertex, Shader.Line.color], function(program, gl) {
 			program.color = gl.getUniformLocation(program, "color");
 			setupCommon(program, gl);
 		});

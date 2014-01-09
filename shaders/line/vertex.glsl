@@ -6,7 +6,7 @@ varying float roffset;
 uniform mat4 view;
 uniform vec3 foward;
 void main() {
-	vec3 side = cross(foward, dir);
+	vec3 side = normalize(cross(foward, dir));
 	fpos = pos + side * offset;
 	gl_Position = view * vec4(fpos, 1.0);
 	roffset = sign(offset);

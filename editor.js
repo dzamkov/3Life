@@ -21,7 +21,7 @@ function Camera(pos, yaw, pitch, foward) {
 	
 	// Moves this camera along its horizontal plane.
 	this.prototype.move = function(amt) {
-		var right = Vec3.cross(this.foward, Vec3.z);
+		var right = Vec3.normalize(Vec3.cross(this.foward, Vec3.z));
 		return new Camera(Vec3.add(this.pos, Vec3.add(
 			Vec3.scale(right, amt[0]), Vec3.scale(this.foward, amt[1]))),
 			this.yaw, this.pitch, this.foward);
@@ -125,7 +125,12 @@ var Editor = new function() {
 				gl.uniformMatrix4fv(lineProgram.view, false, view);
 				gl.uniform4f(lineProgram.color, 1.0, 0.0, 0.0, 1.0);
 				gl.uniform3fv(lineProgram.foward, camera.foward);
+				gl.depthMask(false);
+				gl.enable(gl.BLEND);
+				gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
 				drawLines(lineProgram);
+				gl.disable(gl.BLEND);
+				gl.depthMask(true);
 			}
 		}, undo);
 		

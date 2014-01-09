@@ -1,47 +1,91 @@
-// Describes a free-floating camera for an editor.
-function Camera(pos, yaw, pitch, foward) {
-	this.pos = pos;
-	this.yaw = yaw;
-	this.pitch = pitch;
-	this.foward = foward || [
-		Math.cos(yaw) * Math.cos(pitch),
-		Math.sin(yaw) * Math.cos(pitch),
-		Math.sin(pitch)];
-}
-
-// Define 'Camera' methods.
-(function() {
-
-	// Gets the view matrix for this camera.
-	this.prototype.getViewMatrix = function() {
-		return mat4.lookAt(this.pos,
-			Vec3.add(this.pos, this.foward),
-			Vec3.z);
-	}
-	
-	// Moves this camera along its horizontal plane.
-	this.prototype.move = function(amt) {
-		var right = Vec3.normalize(Vec3.cross(this.foward, Vec3.z));
-		return new Camera(Vec3.add(this.pos, Vec3.add(
-			Vec3.scale(right, amt[0]), Vec3.scale(this.foward, amt[1]))),
-			this.yaw, this.pitch, this.foward);
-	}
-	
-	// Rotates this camera (in radian units).
-	this.prototype.rotate = function(amt, pitchLimit) {
-		var yaw = this.yaw - amt[0];
-		var pitch = Math.max(-pitchLimit, Math.min(pitchLimit, this.pitch + amt[1]));
-		return new Camera(this.pos, yaw, pitch);
-	}
-
-}).call(Camera);
-
 // Contains functions and values related to the 3D
 // scene editor user interface.
 var Editor = new function() {
 
+	// Describes a free-floating camera for an editor.
+	function Camera(pos, yaw, pitch, foward) {
+		this.pos = pos;
+		this.yaw = yaw;
+		this.pitch = pitch;
+		this.foward = foward || [
+			Math.cos(yaw) * Math.cos(pitch),
+			Math.sin(yaw) * Math.cos(pitch),
+			Math.sin(pitch)];
+	}
+
+	// Define 'Camera' methods.
+	(function() {
+
+		// Gets the view matrix for this camera.
+		this.prototype.getViewMatrix = function() {
+			return mat4.lookAt(this.pos,
+				Vec3.add(this.pos, this.foward),
+				Vec3.z);
+		}
+		
+		// Moves this camera along its horizontal plane.
+		this.prototype.move = function(amt) {
+			var right = Vec3.normalize(Vec3.cross(this.foward, Vec3.z));
+			return new Camera(Vec3.add(this.pos, Vec3.add(
+				Vec3.scale(right, amt[0]), Vec3.scale(this.foward, amt[1]))),
+				this.yaw, this.pitch, this.foward);
+		}
+		
+		// Rotates this camera (in radian units).
+		this.prototype.rotate = function(amt, pitchLimit) {
+			var yaw = this.yaw - amt[0];
+			var pitch = Math.max(-pitchLimit, Math.min(pitchLimit, this.pitch + amt[1]));
+			return new Camera(this.pos, yaw, pitch);
+		}
+
+	}).call(Camera);
+	
+	// Creates a mesh for a line grid. The mesh is on the XY plane, and each square
+	// on the grid is 1 by 1. The lines have a width of 1.
+	function lineGrid(rows, cols) {
+		var vertexSize = 5;
+		var attributes = {
+			pos : { size : 2, offset : 0 },
+			dir : { size : 2, offset : 2 },
+			offset : { size : 1, offset : 4 }};
+		var vertexData = new Array();
+		var indexData = new Array();
+		function outputVertex(pos, dir, offset) {
+			var index = vertexData.length;
+			vertexData.length += vertexSize;
+			vertexData[index + 0] = pos[0];
+			vertexData[index + 1] = pos[1];
+			vertexData[index + 2] = dir[0];
+			vertexData[index + 3] = dir[1];
+			vertexData[index + 4] = offset;
+			return index / vertexSize;
+		}
+		function outputLine(from, to, dir, thickness) {
+			var a = outputVertex(from, dir, -thickness);
+			var b = outputVertex(from, dir, thickness);
+			var c = outputVertex(to, dir, -thickness);
+			var d = outputVertex(to, dir, thickness);
+			indexData.push(a);
+			indexData.push(b);
+			indexData.push(c);
+			indexData.push(c);
+			indexData.push(b);
+			indexData.push(d);
+		}
+		for (var i = 0; i <= rows; i++) {
+			outputLine([i, 0], [i, cols], [0, 1], 0.5);
+		}
+		for (var j = 0; j <= cols; j++) {
+			outputLine([0, j], [rows, j], [1, 0], 0.5);
+		}
+		return Mesh.create(Mesh.Mode.Triangles,
+			new Float32Array(vertexData),
+			new Uint16Array(indexData),
+			vertexSize, attributes);
+	}
+
 	// The default input scheme for an editor.
-	this.defaultInputs = {
+	var defaultInputs = {
 		cameraMove : Input.Signal.wasd,
 		cameraRotate : Input.Signal.ijkl
 	}
@@ -50,57 +94,14 @@ var Editor = new function() {
 	this.create = function(canvas, node, inputs, undo) {
 		var gl = createGLContext(canvas);
 		var camera = new Camera([-0.5, 0.0, 0.6], 0.0, -0.5); 
-		var signals = Input.link(inputs, canvas, { }, undo);
+		var signals = Input.link(inputs || defaultInputs, canvas, { }, undo);
 		var scene = new Render.Scene();
 		var renderer = new Render.Direct(Volume, scene.pushMatterLeaf.bind(scene));
 		renderer.set(node);
 		scene.flush(gl);
 		
 		// Create a test line scene.
-		var drawLines = (function() {
-			var vertexSize = 7;
-			var attributes = {
-				pos : { size : 3, offset : 0 },
-				dir : { size : 3, offset : 3 },
-				offset : { size : 1, offset : 6 }};
-			var vertexData = new Array();
-			var indexData = new Array();
-			function outputVertex(pos, dir, offset) {
-				var index = vertexData.length;
-				vertexData.length += vertexSize;
-				vertexData[index + 0] = pos[0];
-				vertexData[index + 1] = pos[1];
-				vertexData[index + 2] = pos[2];
-				vertexData[index + 3] = dir[0];
-				vertexData[index + 4] = dir[1];
-				vertexData[index + 5] = dir[2];
-				vertexData[index + 6] = offset;
-				return index / vertexSize;
-			}
-			function outputLine(from, to, thickness) {
-				var dir = Vec3.normalize(Vec3.sub(to, from));
-				var a = outputVertex(from, dir, -thickness);
-				var b = outputVertex(from, dir, thickness);
-				var c = outputVertex(to, dir, -thickness);
-				var d = outputVertex(to, dir, thickness);
-				indexData.push(a);
-				indexData.push(b);
-				indexData.push(c);
-				indexData.push(c);
-				indexData.push(b);
-				indexData.push(d);
-			}
-			var s = 10;
-			for (var i = 0; i <= s; i++) {
-				outputLine([0, i, 0], [s, i, 0], 0.05);
-				outputLine([i, 0, 0], [i, s, 0], 0.05);
-			}
-			var mesh = Mesh.create(Mesh.Mode.Triangles,
-				new Float32Array(vertexData),
-				new Uint16Array(indexData),
-				vertexSize, attributes);
-			return mesh.create(gl);
-		})();
+		var drawLines = lineGrid(21, 32).create(gl);
 		
 		// Render the editor view.
 		gl.enable(gl.CULL_FACE);
@@ -130,7 +131,7 @@ var Editor = new function() {
 				
 				
 				gl.uniformMatrix4fv(lineProgram.model, false, model);
-				gl.uniform1f(lineProgram.scale, scale);
+				gl.uniform1f(lineProgram.scale, scale * 0.05);
 				gl.uniformMatrix4fv(lineProgram.view, false, view);
 				gl.uniform4f(lineProgram.color, 1.0, 0.0, 0.0, 1.0);
 				gl.uniform3fv(lineProgram.eyePos, camera.pos);
@@ -171,4 +172,8 @@ var Editor = new function() {
 			}
 		});
 	}
+	
+	// Define exports.
+	this.Camera = Camera;
+	this.defaultInputs = defaultInputs;
 };

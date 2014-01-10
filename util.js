@@ -352,6 +352,7 @@ var Callback = new function() {
 	
 	// Common callbacks.
 	this.render = create();
+	this.input = create();
 	this.update = create();
 	
 	// Define exports.
@@ -365,7 +366,7 @@ var Event = new function() {
 	
 	// Registers a listener for a DOM event, similar to 'Callback.register'.
 	this.register = function(element, name, listener, undo) {
-		element.addEventListener(element, name, listener);
+		element.addEventListener(name, listener);
 		Callback.register(undo, function() {
 			element.removeEventListener(name, listener);
 		});

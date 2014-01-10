@@ -154,17 +154,10 @@ var Editor = new function() {
 		};
 	}
 
-	// The default input scheme for an editor.
-	var defaultInputs = {
-		cameraMove : Input.Signal.wasd,
-		cameraRotate : Input.Signal.ijkl
-	}
-	
 	// Creates an editor interface for a canvas.
-	this.create = function(canvas, node, inputs, undo) {
+	this.create = function(canvas, node, undo) {
 		var gl = createGLContext(canvas);
 		var camera = new Camera([-0.5, 0.0, 0.6], 0.0, -0.5); 
-		var signals = Input.link(inputs || defaultInputs, canvas, { }, undo);
 		var scene = new Render.Scene();
 		var renderer = new Render.Direct(Volume, scene.pushMatterLeaf.bind(scene));
 		renderer.set(node);
@@ -196,23 +189,17 @@ var Editor = new function() {
 		}, undo);
 		
 		// Handle movement/update.
+		var getMovement = Input.Signal.wasd.link(canvas);
 		var maxDis = 0.5;
 		var minDis = 0.001;
 		var lastDis = 0.0;
 		Callback.register(Callback.update, function(delta) {
 
 			// Move camera along its plane.
-			var cameraMove = signals.cameraMove();
+			var cameraMove = getMovement();
 			if (cameraMove) {
 				var cameraMoveScale =  0.8 * (lastDis + 0.05) * delta;
 				camera = camera.move(Vec2.scale(cameraMove, cameraMoveScale));
-			}
-			
-			// Rotate camera.
-			var cameraRotate = signals.cameraRotate();
-			if (cameraRotate) {
-				var cameraRotateScale = 1.5 * delta;
-				camera = camera.rotate(Vec2.scale(cameraRotate, cameraRotateScale), Math.PI * 0.4);
 			}
 		
 			// Compute camera distance from matter in the scene.
@@ -225,11 +212,19 @@ var Editor = new function() {
 				} else break;
 			}
 		});
+		
+		// Camera rotatation.
+		Input.Trigger.mouseDrag(
+			Input.Trigger.mouseButton(2, true),
+			Input.Trigger.mouseButton(2, false))
+		.register(canvas, function(rotate) {
+			var scale = 0.003;
+			camera = camera.rotate(Vec2.scale(rotate, scale), Math.PI * 0.4);
+		});
 	}
 	
 	// Define exports.
 	this.Camera = Camera;
-	this.defaultInputs = defaultInputs;
 	this.lineGridMesh = lineGridMesh;
 	this.boxMesh = boxMesh;
 };

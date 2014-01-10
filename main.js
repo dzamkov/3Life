@@ -5,7 +5,7 @@ function init() {
 	var canvas = document.getElementById('canvas');
 	var automataNode = Gol.nextInPlace(Gol.test, 0, Gol.test.depth, 10);
 	var matterNode = Gol.getMatter(automataNode);
-	var editor = Editor.create(canvas, matterNode, Editor.defaultInputs);
+	var editor = Editor.create(canvas, matterNode);
 	
 	var resize = function() {
 		canvas.width = window.innerWidth;
@@ -30,6 +30,7 @@ function init() {
 			elapsedFrames = 0;
 		}
 		Callback.invoke(Callback.render);
+		Callback.invoke(Callback.input, 1.0 / 60.0);
 		Callback.invoke(Callback.update, 1.0 / 60.0);
 		requestAnimationFrame(animate);
 	})();

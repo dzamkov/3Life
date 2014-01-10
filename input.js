@@ -1,99 +1,67 @@
+// "Standardize" methods.
+(function() {
+	var e = HTMLElement.prototype;
+	e.requestPointerLock =
+		e.requestPointerLock ||
+		e.mozRequestPointerLock ||
+		e.webkitRequestPointerLock;
+
+	var d = document;
+	d.exitPointerLock =
+		d.exitPointerLock ||
+		d.mozExitPointerLock ||
+		d.webkitExitPointerLock;
+		
+	var m = MouseEvent.prototype;
+	m.getMovement = function() {
+		return [
+			this.movementX ||
+			this.mozMovementX ||
+			this.webkitMovementX,
+			this.movementY ||
+			this.mozMovementY ||
+			this.webkitMovementY];
+	}
+})();
+
 // Contains functions and types related to user input.
 var Input = new function() {
 
 	// An element-independent description of an input event source, which
-	// may be associated with arbitrary data. Each trigger contains 
-	// a function 'link' which, when given an element and an event 
-	// handler, will pair the event handler with the associated input
-	// event on the element.
-	function Trigger() {
-		this.link = null;
-	}
-	
-	// An element-independent description of an input signal (a continuous
-	// source of arbitrary data). Each signal contains a function 'link' which,
-	// when given an element will return a function to get the current value
-	// of the signal for the element.
-	function Signal() {
-		this.link = null;
-	}
+	// may be associated with arbitrary data.
+	function Trigger() { }
 	
 	// Define 'Trigger' sub-types and constructors.
 	(function() {
 	
-		// The base type for triggers.
-		var Base = this;
+		// Registers a handler for this trigger. Certain triggers (such as those
+		// for keyboard and mouse button events) may be associated with
+		// a given element. When the trigger is fired, the handler is called
+		// with data associated with the event.
+		this.prototype.register = function(element, handler, undo) { }
 		
-		// A trigger for a key event, associating each event with the
-		// scan code of the key.
-		function AnyKey(down) {
-			this.down = down;
-			this.eventName = down ? 'keydown' : 'keyup';
+		// A trigger for a DOM event. The 'extract' function will convert the
+		// Event object into trigger data.
+		function Event(name, extract) {
+			this.name = name;
+			this.extract = extract;
 		}
 		
-		// Define 'AnyKey' methods and values.
+		// Define 'Event' functions.
 		(function() {
-			this.prototype = Object.create(Base);
-			this.prototype.link = function(element, handler, undo) {
-				var listener = function(eventData) {
-					handler(eventData.keyCode);
-				};
-				Event.register(element, this.eventName, listener, undo);
-			};
-			this.down = new AnyKey(true);
-			this.up = new AnyKey(false);
-			this.get = function(down) {
-				return down ? AnyKey.down : AnyKey.up;
-			};
-		}).call(AnyKey);
-		
-		// A trigger for a mouse button event, associating each event 
-		// with the button index.
-		function AnyMouseButton(down) {
-			this.down = down;
-			this.eventName = down ? 'mousedown' : 'mouseup';
-		}
-		
-		// Define 'AnyMouseButton' methods and values.
-		(function() {
-			this.prototype = Object.create(Base);
-			this.prototype.link = function(element, handler, undo) {
-				var listener = function(eventData) {
-					handler(eventData.button);
-				};
-				Event.register(element, this.eventName, listener, undo);
-			};
-			this.down = new AnyMouseButton(true);
-			this.up = new AnyMouseButton(false);
-			this.get = function(down) {
-				return down ? AnyMouseButton.down : AnyMouseButton.up;
-			};
-		}).call(AnyMouseButton);
-		
-		// A type of trigger which only passes events when a given
-		// boolean signal has the value 'true'.
-		function When(source, signal) {
-			this.source = source;
-			this.signal = signal;
-		}
-		
-		// Define 'When' methods.
-		(function() {
-			this.prototype = Object.create(Base);
-			this.prototype.link = function(element, handler, undo) {
-				var shouldPass = this.signal.link(element, undo);
-				this.source.link(element, function(data) {
-					if (shouldPass()) handler(data);
+			this.prototype = Object.create(Trigger.prototype);
+			this.prototype.register = function(element, handler, undo) {
+				var extract = this.extract;
+				Global.Event.register(element, this.name, function(event) {
+					handler(extract(event));
 				}, undo);
-			};
-		}).call(When);
+			}
+			this.create = function(name, extract) {
+				return new Event(name, extract);
+			}
+		}).call(Event);
 		
-		// Define 'when' method for triggers.
-		this.prototype.when = function(signal) {
-			return new When(this, signal);
-		};
-		
-		// A type of trigger which only passes events where the 
+		// A trigger modifier which only passes events where the 
 		// event data is equal to the given target value.
 		function Specific(source, target) {
 			this.source = source;
@@ -102,10 +70,10 @@ var Input = new function() {
 		
 		// Define 'Specific' methods.
 		(function() {
-			this.prototype = Object.create(Base);
-			this.prototype.link = function(element, handler, undo) {
+			this.prototype = Object.create(Trigger.prototype);
+			this.prototype.register = function(element, handler, undo) {
 				var target = this.target;
-				this.source.link(element, function(data) {
+				this.source.register(element, function(data) {
 					if (data === target) handler(data);
 				}, undo);
 			};
@@ -114,56 +82,105 @@ var Input = new function() {
 		// Define 'specific' method for triggers.
 		this.prototype.specific = function(target) {
 			return new Specific(this, target);
-		};
-		
-		// Creates a trigger for a key.
-		function key(code, down) {
-			return AnyKey.get(down).specific(code);
 		}
 		
-		// Creates a trigger for a mouse button.
+		// A trigger which fires with 2D movement vectors whenever the mouse moves
+		// between firings of the given 'start' and 'stop' triggers.
+		function MouseDrag(start, stop) {
+			this.start = start;
+			this.stop = stop;
+		}
+		
+		// Define 'MouseDrag' functions.
+		(function() {
+			this.prototype = Object.create(Trigger.prototype);
+			this.prototype.register = function(element, handler, undo) {
+				function listener(e) {
+					var m = e.getMovement();
+					m[1] = -m[1];
+					handler(m);
+				}
+				this.start.register(element, function() {
+					element.addEventListener('mousemove', listener);
+				}, undo);
+				this.stop.register(element, function() {
+					element.removeEventListener('mousemove', listener);
+				}, undo);
+			}
+			this.create = function(start, stop) {
+				return new MouseDrag(start, stop);
+			}
+		}).call(MouseDrag);
+		
+		// Key triggers.
+		var extractKeyCode = function(event) { return event.keyCode; };
+		var anyKeyDown = Event.create('keydown', extractKeyCode);
+		var anyKeyUp = Event.create('keyup', extractKeyCode);
+		function anyKey(down) {
+			return down ? anyKeyDown : anyKeyUp;
+		}
+		function key(code, down) {
+			return anyKey(down).specific(code);
+		}
+		
+		// Mouse button triggers.
+		var extractButton = function(event) { return event.button; };
+		var anyMouseButtonDown = Event.create('mousedown', extractButton);
+		var anyMouseButtonUp = Event.create('mouseup', extractButton);
+		function anyMouseButton(down) {
+			return down ? anyMouseButtonDown : anyMouseButtonUp;
+		}
+		var mouseButtonUp = new Array(3);
+		var mouseButtonDown = new Array(3);
 		function mouseButton(index, down) {
-			return AnyMouseButton.get(down).specific(code);
+			var cache = down ? mouseButtonDown : mouseButtonUp;
+			if (cache[index]) return cache[index];
+			return cache[index] = anyMouseButton(down).specific(index);
 		}
 		
 		// Define exports.
-		this.AnyKey = AnyKey;
-		this.anykey = AnyKey.get;
-		this.AnyMouseButton = AnyMouseButton;
-		this.anyMouseButton = AnyMouseButton.get;
-		this.When = When;
+		this.Event = Event;
+		this.event = Event.create;
 		this.Specific = Specific;
-		this.key = key;
+		this.MouseDrag = MouseDrag;
+		this.mouseDrag = MouseDrag.create;
+		this.anyMouseButton = anyMouseButton;
+		this.anyKey = anyKey;
 		this.mouseButton = mouseButton;
+		this.key = key;
 	}).call(Trigger);
+	
+	// An element-independent description of an input signal (a continuous
+	// source of arbitrary data).
+	function Signal() { }
 
 	// Define 'Signal' sub-types and constructors.
 	(function() {
 	
-		// The base type for signals.
-		var Base = this;
+		// Creates a function to read data from this signal.
+		this.prototype.link = function(element, undo) { }
 		
-		// A signal that returns the state of the key 
-		// with the given scan code (true for down, false for up).
+		// A signal that returns the state of the key with 
+		// the given scan code (true for down, false for up).
 		function Key(code) {
 			this.code = code;
 		}
 		
 		// Define 'Key' methods.
 		(function() {
-			this.prototype = Object.create(Base);
+			this.prototype = Object.create(Signal.prototype);
 			this.prototype.link = function(element, undo) {
-				if (!element.keyStates) {
-					var keyStates = element.keyStates = new Array();
-					element.addEventListener('keydown', function(eventData) {
+				if (!window.keyStates) {
+					var keyStates = window.keyStates = new Array();
+					window.addEventListener('keydown', function(eventData) {
 						keyStates[eventData.keyCode] = true;
 					});
-					element.addEventListener('keyup', function(eventData) {
+					window.addEventListener('keyup', function(eventData) {
 						keyStates[eventData.keyCode] = false;
 					});
 				}
 				var code = this.code;
-				var keyStates = element.keyStates;
+				var keyStates = window.keyStates;
 				if (!(code in keyStates)) keyStates[code] = false;
 				return function() { return keyStates[code]; };
 			};
@@ -172,20 +189,20 @@ var Input = new function() {
 			}
 		}).call(Key);
 		
-		// A signal which returns a directional 2-vector of the given
-		// magnitude (or 0.0) by summing contributions from the given
+		// A signal which returns a directional 2-vector of magnitude
+		// 1.0 by summing contributions from the given
 		// from the given boolean signals.
-		function Compass(xn, xp, yn, yp, mag) {
+		function Compass(xn, xp, yn, yp) {
 			this.xn = xn;
 			this.xp = xp;
 			this.yn = yn;
 			this.yp = yp;
-			this.mag = mag;
 		}
 		
 		// Define 'Compass' methods.
 		(function() {
-			this.prototype = Object.create(Base);
+			var dia = Math.sqrt(2) / 2.0;
+			this.prototype = Object.create(Signal.prototype);
 			this.prototype.link = function(element, undo) {
 				var xn = this.xn.link(element, undo);
 				var xp = this.xp.link(element, undo);
@@ -195,11 +212,9 @@ var Input = new function() {
 				return function() {
 					var res = [xp() - xn(), yp() - yn()];
 					if (Math.abs(res[0]) == 1.0 && Math.abs(res[1]) == 1.0) {
-						res[0] *= Math.sqrt(2.0) / 2.0;
-						res[1] *= Math.sqrt(2.0) / 2.0;
+						res[0] *= dia;
+						res[1] *= dia;
 					}
-					res[0] *= mag;
-					res[1] *= mag;
 					return res;
 				};
 			};
@@ -208,98 +223,13 @@ var Input = new function() {
 			}
 		}).call(Compass);
 		
-		// A signal which gets data from a joystick using the Javascript-joystick
-		// plugin (https://code.google.com/p/javascript-joystick/).
-		function Joystick(device, read) {
-			this.device = device;
-			this.read = read;
-		}
-		
-		// Define 'Joystick' methods.
-		(function() {
-			this.prototype = Object.create(Base);
-		
-			// Check if the plugin is available.
-			var hasPlugin = false;
-			if (navigator && navigator.plugins) {
-				for (var n = 0; n < navigator.plugins.length; n++) {
-					if (navigator.plugins[n].name.indexOf("Joystick") != -1) {
-						hasPlugin = true;
-						break;
-					}
-				}
-			}
-			
-			this.hasPlugin = hasPlugin;
-			if (hasPlugin) {
-			
-				// Create an array of controls for devices.
-				var controls = new Array();
-				function getControl(index) {
-					if (controls[index]) return controls[index];
-					var control = controls[index] = document.createElement("embed");
-					control.type = "application/x-vnd.numfum-joystick";
-					control.width  = 0;
-					control.height = 0;
-					document.body.appendChild(control);
-					control.isReady = function() {
-						if (control.setDevice) {
-							control.setDevice(index);
-							control.isReady = function() {
-								return control.isConnected();
-							};
-							return control.isConnected();
-						} else return false;
-					}
-					return control;
-				}
-				
-				// Define link method.
-				this.prototype.link = function(element, undo) {
-					var control = getControl(this.device);
-					var read = this.read;
-					return function() {
-						return control.isReady() ? read(control) : null;
-					};
-				}
-			} else {
-			
-				// Without the plugin, this is rather boring.
-				this.prototype.link = function(element, undo) {
-					return ignore;
-				}
-			}
-			this.create = function(device, read) {
-				return new Joystick(device, read);
-			}
-			
-			// Creates a 2D vector signal for a joystick XY axis.
-			this.xy = function(device) {
-				return new Joystick(device, function(control) {
-					return [
-						control.x / 32768.0 - 1.0,
-						1.0 - control.y / 32768.0];
-				});
-			}
-			
-			// Creates a 2D vector signal for a joystick RZ axis.
-			this.rz = function(device) {
-				return new Joystick(device, function(control) {
-					return [
-						control.r / 32768.0 - 1.0,
-						1.0 - control.z / 32768.0];
-				});
-			}
-		}).call(Joystick);
-		
 		// A signal which returns a 2-vector that describes the
 		// direction of movement of the WASD keys.
 		var wasd = Compass.create(
 			Key.create(65),
 			Key.create(68),
 			Key.create(83),
-			Key.create(87),
-			1.0);
+			Key.create(87));
 			
 		// A signal which returns a 2-vector that describes the
 		// direction of movement of the IJKL keys.
@@ -307,37 +237,18 @@ var Input = new function() {
 			Key.create(74),
 			Key.create(76),
 			Key.create(75),
-			Key.create(73),
-			1.0);
+			Key.create(73));
 	
 		// Define exports.
 		this.Key = Key;
 		this.key = Key.create;
 		this.Compass = Compass;
 		this.compass = Compass.create;
-		this.Joystick = Joystick;
-		this.joystick = Joystick.create;
 		this.wasd = wasd;
 		this.ijkl = ijkl;
 	}).call(Signal);
 	
-	// Links a named set of triggers and signals to a control. For each
-	// trigger, the corresponding handler in the second argument is linked.
-	// This function returns the named set of getter functions for the signals.
-	function link(inputs, control, handlers, undo) {
-		var getters = { };
-		for (name in inputs) {
-			if (name in handlers) {
-				inputs[name].link(control, handlers[name], undo);
-			} else {
-				getters[name] = inputs[name].link(control, undo);
-			}
-		}
-		return getters;
-	}
-	
 	// Define exports.
 	this.Trigger = Trigger;
 	this.Signal = Signal;
-	this.link = link;
 }

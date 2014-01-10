@@ -52,7 +52,7 @@ var Editor = new function() {
 	
 	// Creates a mesh for a line grid. The mesh is on the XY plane, and each square
 	// on the grid is 1 by 1. The lines have a width of 1.
-	function lineGrid(rows, cols) {
+	function lineGridMesh(x, y) {
 		var mode = Mesh.Mode.Triangles;
 		var vertexSize = 5;
 		var attributes = {
@@ -60,25 +60,42 @@ var Editor = new function() {
 			dir : { size : 2, offset : 2 },
 			offset : { size : 1, offset : 4 }};
 		return Mesh.createBuilder(mode, vertexSize, attributes, function(builder) {
-			for (var i = 0; i <= rows; i++) {
-				builder.line([i, 0], [i, cols], 0.5, [0, 1]);
+			for (var i = 0; i <= x; i++) {
+				builder.line([i, 0], [i, y], 0.5, [0, 1]);
 			}
-			for (var j = 0; j <= cols; j++) {
-				builder.line([0, j], [rows, j], 0.5, [1, 0]);
+			for (var j = 0; j <= y; j++) {
+				builder.line([0, j], [x, j], 0.5, [1, 0]);
 			}
 		});
 	}
 	
+	// A mesh for a unit cube between (0, 0, 0) and (1, 1, 1) with an open face
+	// on the XY plane. The cube is made of lines of width 1.
+	var boxMesh = Mesh.createBuilder(Mesh.Mode.Triangles, 7, {
+		pos : { size : 3, offset : 0 },
+		dir : { size : 3, offset : 3 },
+		offset : { size : 1, offset : 6 }}, 
+	function(builder) {
+		builder.line([0, 0, 1], [0, 1, 1], 0.5, [0, 1, 0]);
+		builder.line([1, 0, 1], [1, 1, 1], 0.5, [0, 1, 0]);
+		builder.line([0, 0, 1], [1, 0, 1], 0.5, [1, 0, 0]);
+		builder.line([0, 1, 1], [1, 1, 1], 0.5, [1, 0, 0]);
+		builder.line([0, 0, 0], [0, 0, 1], 0.5, [0, 0, 1]);
+		builder.line([0, 1, 0], [0, 1, 1], 0.5, [0, 0, 1]);
+		builder.line([1, 0, 0], [1, 0, 1], 0.5, [0, 0, 1]);
+		builder.line([1, 1, 0], [1, 1, 1], 0.5, [0, 0, 1]);
+	});
+	
 	// Contains three matrices which, when applied to a line grid,
-	// will rotate it so that its normal to the axis corresponding
-	// to the matrix indexs.
+	// will rotate it so that its normal is along the axis corresponding
+	// to the matrix index.
 	var permuteMatrices = [
-		[0, 0, 1,
-		 1, 0, 0,
-		 0, 1, 0],
 		[0, 1, 0,
 		 0, 0, 1,
 		 1, 0, 0],
+		[0, 0, 1,
+		 1, 0, 0,
+		 0, 1, 0],
 		[1, 0, 0,
 		 0, 1, 0,
 		 0, 0, 1]];
@@ -94,40 +111,45 @@ var Editor = new function() {
 		var width = bounds.max[x] - bounds.min[x];
 		var height = bounds.max[y] - bounds.min[y];
 		var depth = bounds.max[axis] - bounds.min[axis];
-		var rows = height / scale;
-		var cols = width / scale;
-		var drawGrid = lineGrid(rows, cols).create(gl);
+		var drawGrid = lineGridMesh(width / scale, height / scale).create(gl);
+		var drawBox = boxMesh.create(gl);
 		
-		var primary = mat4.create();
-		mat3.toMat4(permuteMatrices[axis], primary);
-		mat4.translate(primary, bounds.min);
-		mat4.scale(primary, [scale, scale, scale]);
+		var permute = mat4.create();
+		mat3.toMat4(permuteMatrices[axis], permute);
 		
-		var secondary = mat4.create();
-		mat4.set(primary, secondary);
-		mat4.translate(secondary, [0, 0, depth / scale]);
+		var gridModel = mat4.create();
+		mat4.identity(gridModel);
+		mat4.translate(gridModel, flip ? bounds.max : bounds.min);
+		mat4.multiply(gridModel, permute);
+		mat4.scale(gridModel, [scale, scale, scale]);
+		
+		var boxModel = mat4.create();
+		mat4.identity(boxModel);
+		mat4.translate(boxModel, flip ? bounds.max : bounds.min);
+		mat4.multiply(boxModel, permute);
+		mat4.scale(boxModel, [width, height, depth]);
 		
 		if (flip) {
-			var temp = primary;
-			primary = secondary;
-			secondary = temp;
+			mat4.scale(gridModel, [-1, -1, -1]);
+			mat4.scale(boxModel, [-1, -1, -1]);
 		}
+		
 		
 		var rProgram = Program.Line.color;
 		return function(view, eyePos) {
 			if (rProgram.hasValue) {
 				var program = rProgram.value.get(gl);
 				gl.useProgram(program);
-				gl.uniformMatrix4fv(program.model, false, primary);
-				gl.uniform1f(program.scale, scale * 0.1);
+				gl.uniformMatrix4fv(program.model, false, gridModel);
+				gl.uniform1f(program.scale, scale * 0.07);
 				gl.uniformMatrix4fv(program.view, false, view);
-				gl.uniform4f(program.color, 0.0, 0.6, 1.0, 1.0);
+				gl.uniform4f(program.color, 0.0, 0.3, 0.6, 1.0);
 				gl.uniform3fv(program.eyePos, eyePos);
 				drawGrid(program);
-				gl.uniformMatrix4fv(program.model, false, secondary);
+				gl.uniformMatrix4fv(program.model, false, boxModel);
 				gl.uniform1f(program.scale, scale * 0.05);
 				gl.uniform4f(program.color, 0.5, 0.0, 0.0, 1.0);
-				drawGrid(program);
+				drawBox(program);
 			}
 		};
 	}
@@ -148,11 +170,12 @@ var Editor = new function() {
 		renderer.set(node);
 		scene.flush(gl);
 		
+		var t = 1.0 / (1 << 7);
 		var box = new Box(
 			new Volume.Bound(
-				[0.0, 0.0, 0.0],
-				[0.125, 0.125, 0.25]),
-			0, false, 1.0 / (1 << 5));
+				[10 * t, 10 * t, -20 * t],
+				[30 * t, 30 * t, -16 * t]),
+			2, true, t);
 		var drawBox = prepareDrawBox(gl, box);
 			
 		// Render the editor view.
@@ -207,5 +230,6 @@ var Editor = new function() {
 	// Define exports.
 	this.Camera = Camera;
 	this.defaultInputs = defaultInputs;
-	this.lineGrid = lineGrid;
+	this.lineGridMesh = lineGridMesh;
+	this.boxMesh = boxMesh;
 };

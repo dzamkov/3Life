@@ -419,23 +419,39 @@ function Space(dimension) {
 		return Vector.add(Vector.scale(offsets[index], scale), offset);
 	}
 	
-	// Define module exports.
-	var Space = { };
-	Space.Vector = Vector;
-	Space.Bound = Bound;
-	Space.Permutation = Permutation;
-	Space.Node = Node;
-	Space.Boolean = Boolean;
-	Space.dimension = dimension;
-	Space.vec = Vector.create;
-	Space.offsets = offsets;
-	Space.getOffset = getOffset;
-	return Space;
+	// Define exports.
+	this.Vector = Vector;
+	this.Bound = Bound;
+	this.Permutation = Permutation;
+	this.Node = Node;
+	this.Boolean = Boolean;
+	this.dimension = dimension;
+	this.vec = Vector.create;
+	this.offsets = offsets;
+	this.getOffset = getOffset;
 };
 
+// Define 'Space' functions.
+(function() {
+
+	// Preconstructed spaces for various dimensions.
+	var spaces = new Array();
+	
+	// Gets a space for the given dimension.
+	function get(dimension) {
+		var space = spaces[dimension];
+		if (space) return space; else {
+			return spaces[dimension] = new Space(dimension);
+		}
+	}
+	
+	// Define exports.
+	this.get = get;
+}).call(Space);
+
 // Construct default spaces.
-var Area = Space(2);
-var Volume = Space(3);
+var Area = Space.get(2);
+var Volume = Space.get(3);
 var Rect = Area.Bound;
 var Vec2 = Area.Vector;
 var Vec3 = Volume.Vector;

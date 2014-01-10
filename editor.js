@@ -53,45 +53,20 @@ var Editor = new function() {
 	// Creates a mesh for a line grid. The mesh is on the XY plane, and each square
 	// on the grid is 1 by 1. The lines have a width of 1.
 	function lineGrid(rows, cols) {
+		var mode = Mesh.Mode.Triangles;
 		var vertexSize = 5;
 		var attributes = {
 			pos : { size : 2, offset : 0 },
 			dir : { size : 2, offset : 2 },
 			offset : { size : 1, offset : 4 }};
-		var vertexData = new Array();
-		var indexData = new Array();
-		function outputVertex(pos, dir, offset) {
-			var index = vertexData.length;
-			vertexData.length += vertexSize;
-			vertexData[index + 0] = pos[0];
-			vertexData[index + 1] = pos[1];
-			vertexData[index + 2] = dir[0];
-			vertexData[index + 3] = dir[1];
-			vertexData[index + 4] = offset;
-			return index / vertexSize;
-		}
-		function outputLine(from, to, dir, thickness) {
-			var a = outputVertex(from, dir, -thickness);
-			var b = outputVertex(from, dir, thickness);
-			var c = outputVertex(to, dir, -thickness);
-			var d = outputVertex(to, dir, thickness);
-			indexData.push(a);
-			indexData.push(b);
-			indexData.push(c);
-			indexData.push(c);
-			indexData.push(b);
-			indexData.push(d);
-		}
-		for (var i = 0; i <= rows; i++) {
-			outputLine([i, 0], [i, cols], [0, 1], 0.5);
-		}
-		for (var j = 0; j <= cols; j++) {
-			outputLine([0, j], [rows, j], [1, 0], 0.5);
-		}
-		return Mesh.create(Mesh.Mode.Triangles,
-			new Float32Array(vertexData),
-			new Uint16Array(indexData),
-			vertexSize, attributes);
+		return Mesh.createBuilder(mode, vertexSize, attributes, function(builder) {
+			for (var i = 0; i <= rows; i++) {
+				builder.line([i, 0], [i, cols], 0.5, [0, 1]);
+			}
+			for (var j = 0; j <= cols; j++) {
+				builder.line([0, j], [rows, j], 0.5, [1, 0]);
+			}
+		});
 	}
 	
 	// Contains three matrices which, when applied to a line grid,

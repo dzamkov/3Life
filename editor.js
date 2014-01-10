@@ -40,6 +40,16 @@ var Editor = new function() {
 
 	}).call(Camera);
 	
+	// Describes a selection box for an editor. The selection box
+	// covers a rectangular volume, has a primary face (for painting)
+	// and has a scale (for determining the size of units within the box).
+	function Box(bounds, axis, flip, scale) {
+		this.bounds = bounds;
+		this.axis = axis;
+		this.flip = flip;
+		this.scale = scale;
+	}
+	
 	// Creates a mesh for a line grid. The mesh is on the XY plane, and each square
 	// on the grid is 1 by 1. The lines have a width of 1.
 	function lineGrid(rows, cols) {
@@ -83,6 +93,69 @@ var Editor = new function() {
 			new Uint16Array(indexData),
 			vertexSize, attributes);
 	}
+	
+	// Contains three matrices which, when applied to a line grid,
+	// will rotate it so that its normal to the axis corresponding
+	// to the matrix indexs.
+	var permuteMatrices = [
+		[0, 0, 1,
+		 1, 0, 0,
+		 0, 1, 0],
+		[0, 1, 0,
+		 0, 0, 1,
+		 1, 0, 0],
+		[1, 0, 0,
+		 0, 1, 0,
+		 0, 0, 1]];
+	
+	// Creates and returns a function to draw a selection box.
+	function prepareDrawBox(gl, box) {
+		var bounds = box.bounds;
+		var axis = box.axis;
+		var flip = box.flip;
+		var scale = box.scale;
+		var x = (axis + 1) % 3;
+		var y = (axis + 2) % 3;
+		var width = bounds.max[x] - bounds.min[x];
+		var height = bounds.max[y] - bounds.min[y];
+		var depth = bounds.max[axis] - bounds.min[axis];
+		var rows = height / scale;
+		var cols = width / scale;
+		var drawGrid = lineGrid(rows, cols).create(gl);
+		
+		var primary = mat4.create();
+		mat3.toMat4(permuteMatrices[axis], primary);
+		mat4.translate(primary, bounds.min);
+		mat4.scale(primary, [scale, scale, scale]);
+		
+		var secondary = mat4.create();
+		mat4.set(primary, secondary);
+		mat4.translate(secondary, [0, 0, depth / scale]);
+		
+		if (flip) {
+			var temp = primary;
+			primary = secondary;
+			secondary = temp;
+		}
+		
+		var rProgram = Program.Line.color;
+		return function(view, eyePos) {
+			if (rProgram.hasValue) {
+				var program = rProgram.value.get(gl);
+				gl.useProgram(program);
+				gl.uniformMatrix4fv(program.model, false, primary);
+				gl.uniform1f(program.scale, scale * 0.1);
+				gl.uniformMatrix4fv(program.view, false, view);
+				gl.uniform4f(program.color, 0.0, 0.6, 1.0, 1.0);
+				gl.uniform3fv(program.eyePos, eyePos);
+				drawGrid(program);
+				gl.uniformMatrix4fv(program.model, false, secondary);
+				gl.uniform1f(program.scale, scale * 0.05);
+				gl.uniform4f(program.color, 0.5, 0.0, 0.0, 1.0);
+				drawGrid(program);
+			}
+		};
+	}
 
 	// The default input scheme for an editor.
 	var defaultInputs = {
@@ -100,9 +173,13 @@ var Editor = new function() {
 		renderer.set(node);
 		scene.flush(gl);
 		
-		// Create a test line scene.
-		var drawLines = lineGrid(21, 32).create(gl);
-		
+		var box = new Box(
+			new Volume.Bound(
+				[0.0, 0.0, 0.0],
+				[0.125, 0.125, 0.25]),
+			0, false, 1.0 / (1 << 5));
+		var drawBox = prepareDrawBox(gl, box);
+			
 		// Render the editor view.
 		gl.enable(gl.CULL_FACE);
 		gl.enable(gl.DEPTH_TEST);
@@ -117,28 +194,7 @@ var Editor = new function() {
 			
 			var scale = 1.0 / (1 << node.depth);
 			scene.render(gl, view, scale);
-			
-			var lineProgram = Program.Line.color;
-			if (lineProgram.hasValue) {
-				lineProgram = lineProgram.value.get(gl);
-				gl.useProgram(lineProgram);
-				
-				
-				var model = mat4.create();
-				mat4.identity(model);
-				mat4.translate(model, [15 * scale, 15 * scale, -17 * scale]);
-				mat4.scale(model, [scale, scale, scale]);
-				
-				
-				gl.uniformMatrix4fv(lineProgram.model, false, model);
-				gl.uniform1f(lineProgram.scale, scale * 0.05);
-				gl.uniformMatrix4fv(lineProgram.view, false, view);
-				gl.uniform4f(lineProgram.color, 1.0, 0.0, 0.0, 1.0);
-				gl.uniform3fv(lineProgram.eyePos, camera.pos);
-				gl.depthMask(false);
-				drawLines(lineProgram);
-				gl.depthMask(true);
-			}
+			drawBox(view, camera.pos);
 		}, undo);
 		
 		// Handle movement/update.
@@ -176,4 +232,5 @@ var Editor = new function() {
 	// Define exports.
 	this.Camera = Camera;
 	this.defaultInputs = defaultInputs;
+	this.lineGrid = lineGrid;
 };

@@ -40,6 +40,14 @@ var Editor = new function() {
 
 	}).call(Camera);
 	
+	// Describes a selection box for an editor. The selection box covers a
+	// volume aligned to a cubic grid of a given scale. It is possible for a
+	// selection box to extend infinitely in one or more directions.
+	function Box(bounds, scale) {
+		this.bounds = bounds;
+		this.scale = scale;
+	}
+	
 	// Describes a selection box for an editor. The selection box
 	// covers a rectangular volume, has a primary face (for painting)
 	// and has a scale (for determining the size of units within the box).
@@ -53,13 +61,11 @@ var Editor = new function() {
 	// Creates a mesh for a line grid. The mesh is on the XY plane, and each square
 	// on the grid is 1 by 1. The lines have a width of 1.
 	function lineGridMesh(x, y) {
-		var mode = Mesh.Mode.Triangles;
-		var vertexSize = 5;
-		var attributes = {
+		return Mesh.createBuilder(Mesh.Mode.Triangles, 5, {
 			pos : { size : 2, offset : 0 },
 			dir : { size : 2, offset : 2 },
-			offset : { size : 1, offset : 4 }};
-		return Mesh.createBuilder(mode, vertexSize, attributes, function(builder) {
+			offset : { size : 1, offset : 4 }
+		}, function(builder) {
 			for (var i = 0; i <= x; i++) {
 				builder.line([i, 0], [i, y], 0.5, [0, 1]);
 			}
@@ -68,23 +74,6 @@ var Editor = new function() {
 			}
 		});
 	}
-	
-	// A mesh for a unit cube between (0, 0, 0) and (1, 1, 1) with an open face
-	// on the XY plane. The cube is made of lines of width 1.
-	var boxMesh = Mesh.createBuilder(Mesh.Mode.Triangles, 7, {
-		pos : { size : 3, offset : 0 },
-		dir : { size : 3, offset : 3 },
-		offset : { size : 1, offset : 6 }}, 
-	function(builder) {
-		builder.line([0, 0, 1], [0, 1, 1], 0.5, [0, 1, 0]);
-		builder.line([1, 0, 1], [1, 1, 1], 0.5, [0, 1, 0]);
-		builder.line([0, 0, 1], [1, 0, 1], 0.5, [1, 0, 0]);
-		builder.line([0, 1, 1], [1, 1, 1], 0.5, [1, 0, 0]);
-		builder.line([0, 0, 0], [0, 0, 1], 0.5, [0, 0, 1]);
-		builder.line([0, 1, 0], [0, 1, 1], 0.5, [0, 0, 1]);
-		builder.line([1, 0, 0], [1, 0, 1], 0.5, [0, 0, 1]);
-		builder.line([1, 1, 0], [1, 1, 1], 0.5, [0, 0, 1]);
-	});
 	
 	// Contains three matrices which, when applied to a line grid,
 	// will rotate it so that its normal is along the axis corresponding
@@ -99,59 +88,25 @@ var Editor = new function() {
 		[1, 0, 0,
 		 0, 1, 0,
 		 0, 0, 1]];
-	
-	// Creates and returns a function to draw a selection box.
-	function prepareDrawBox(gl, box) {
-		var bounds = box.bounds;
-		var axis = box.axis;
-		var flip = box.flip;
-		var scale = box.scale;
-		var x = (axis + 1) % 3;
-		var y = (axis + 2) % 3;
-		var width = bounds.max[x] - bounds.min[x];
-		var height = bounds.max[y] - bounds.min[y];
-		var depth = bounds.max[axis] - bounds.min[axis];
-		var drawGrid = lineGridMesh(width / scale, height / scale).create(gl);
-		var drawBox = boxMesh.create(gl);
-		
-		var permute = mat4.create();
-		mat3.toMat4(permuteMatrices[axis], permute);
-		
-		var gridModel = mat4.create();
-		mat4.identity(gridModel);
-		mat4.translate(gridModel, flip ? bounds.max : bounds.min);
-		mat4.multiply(gridModel, permute);
-		mat4.scale(gridModel, [scale, scale, scale]);
-		
-		var boxModel = mat4.create();
-		mat4.identity(boxModel);
-		mat4.translate(boxModel, flip ? bounds.max : bounds.min);
-		mat4.multiply(boxModel, permute);
-		mat4.scale(boxModel, [width, height, depth]);
-		
-		if (flip) {
-			mat4.scale(gridModel, [-1, -1, -1]);
-			mat4.scale(boxModel, [-1, -1, -1]);
-		}
-		
-		
-		var rProgram = Program.Line.color;
+		 
+	// Creates and returns a function to draw a wireframe box
+	// with the given parameters. 
+	function prepareDrawLineBox(gl, color, width, bounds) {
+		var program = Program.Line.color.value.get(gl);
+		var drawLineCube = Mesh.lineCube.get(gl);
+		var model = mat4.create();
+		mat4.identity(model);
+		mat4.translate(model, bounds.min);
+		mat4.scale(model, Vec3.sub(bounds.max, bounds.min));
 		return function(view, eyePos) {
-			if (rProgram.hasValue) {
-				var program = rProgram.value.get(gl);
-				gl.useProgram(program);
-				gl.uniformMatrix4fv(program.model, false, gridModel);
-				gl.uniform1f(program.scale, scale * 0.07);
-				gl.uniformMatrix4fv(program.view, false, view);
-				gl.uniform4f(program.color, 0.0, 0.3, 0.6, 1.0);
-				gl.uniform3fv(program.eyePos, eyePos);
-				drawGrid(program);
-				gl.uniformMatrix4fv(program.model, false, boxModel);
-				gl.uniform1f(program.scale, scale * 0.05);
-				gl.uniform4f(program.color, 0.5, 0.0, 0.0, 1.0);
-				drawBox(program);
-			}
-		};
+			gl.useProgram(program);
+			gl.uniform4fv(program.color, color);
+			gl.uniform1f(program.scale, width);
+			gl.uniformMatrix4fv(program.model, false, model);
+			gl.uniformMatrix4fv(program.view, false, view);
+			gl.uniform3fv(program.eyePos, eyePos);
+			drawLineCube(program);
+		}
 	}
 
 	// Creates an editor interface for a canvas.
@@ -164,12 +119,10 @@ var Editor = new function() {
 		scene.flush(gl);
 		
 		var t = 1.0 / (1 << 7);
-		var box = new Box(
-			new Volume.Bound(
-				[10 * t, 10 * t, -20 * t],
-				[30 * t, 30 * t, -16 * t]),
-			2, true, t);
-		var drawBox = prepareDrawBox(gl, box);
+		var box = new Box(new Volume.Bound(
+			[10 * t, 10 * t, -20 * t],
+			[30 * t, 30 * t, -16 * t]), t);
+		var drawBox = prepareDrawLineBox(gl, [0.4, 0.4, 0.4, 1.0], t * 0.04, box.bounds);
 			
 		// Render the editor view.
 		gl.enable(gl.CULL_FACE);
@@ -223,8 +176,10 @@ var Editor = new function() {
 		});
 	}
 	
+	// Declare dependencies.
+	this.dependencies = [Program.Line.color];
+	
 	// Define exports.
 	this.Camera = Camera;
 	this.lineGridMesh = lineGridMesh;
-	this.boxMesh = boxMesh;
 };

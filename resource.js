@@ -422,10 +422,31 @@ function Mesh(mode, vertexData, indexData, vertexSize, attributes) {
 		// Create mesh.
 		return create(mode, vertexData, indexData, vertexSize, attributes);
 	}
+	
+	// A mesh for a unit cube between (0, 0, 0) and (1, 1, 1) constructed out of 
+	// lines of width 1.
+	var lineCube = createBuilder(Mode.Triangles, 7, {
+		pos : { size : 3, offset : 0 },
+		dir : { size : 3, offset : 3 },
+		offset : { size : 1, offset : 6 }
+	}, function(builder) {
+		for (var axis = 0; axis < 3; axis++) {
+			var dir = Vec3.unproj(Vec2.zero, axis, 1);
+			for (var i = 0; i < 2; i++) {
+				for (var j = 0; j < 2; j++) {
+					var vec = [i, j];
+					var from = Vec3.unproj(vec, axis, 0);
+					var to = Vec3.unproj(vec, axis, 1);
+					builder.line(from, to, 0.5, dir);
+				}
+			}
+		}
+	});
 
 	// Define exports.
 	this.Mode = Mode;
 	this.create = create;
 	this.createExpanded = createExpanded;
 	this.createBuilder = createBuilder;
+	this.lineCube = lineCube;
 }).call(Mesh);

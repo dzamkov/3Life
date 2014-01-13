@@ -81,6 +81,27 @@ function Space(dimension) {
 		function normalize(vec) {
 			return scale(vec, 1.0 / len(vec));
 		}
+		
+		// Projects a vector to the next lower dimension along
+		// the given axis.
+		function proj(vec, axis) {
+			var res = new Array(dimension - 1);
+			for (var i = 0; i < res.length; i++) {
+				res[i] = vec[(axis + i + 1) % dimension];
+			}
+			return res;
+		}
+		
+		// Projects a vector from the next lower dimension by specifying
+		// a component value for an axis.
+		function unproj(vec, axis, pos) {
+			var res = new Array(dimension);
+			res[axis] = pos;
+			for (var i = 0; i < vec.length; i++) {
+				res[(axis + i + 1) % dimension] = vec[i];
+			}
+			return res;
+		}
 	
 		// Define exports.
 		this.zero = zero;
@@ -91,6 +112,8 @@ function Space(dimension) {
 		this.scale = scale;
 		this.len = len;
 		this.normalize = normalize;
+		this.proj = proj;
+		this.unproj = unproj;
 	}
 	
 	// Describes an orthogonal hypervolume using a min and

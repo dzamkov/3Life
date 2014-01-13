@@ -3,10 +3,6 @@ var movement;
 window.addEventListener('load', init, false);
 function init() {
 	var canvas = document.getElementById('canvas');
-	var automataNode = Gol.nextInPlace(Gol.test, 0, Gol.test.depth, 10);
-	var matterNode = Gol.getMatter(automataNode);
-	var editor = Editor.create(canvas, matterNode);
-	
 	var resize = function() {
 		canvas.width = window.innerWidth;
 		canvas.height = window.innerHeight;
@@ -34,4 +30,10 @@ function init() {
 		Callback.invoke(Callback.update, 1.0 / 60.0);
 		requestAnimationFrame(animate);
 	})();
+	
+	join(Editor.dependencies, ignore).done(function() {
+		var automataNode = Gol.nextInPlace(Gol.test, 0, Gol.test.depth, 10);
+		var matterNode = Gol.getMatter(automataNode);
+		var editor = Editor.create(canvas, matterNode);
+	});
 }

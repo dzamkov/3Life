@@ -231,4 +231,4 @@ Gol.getMatter = function(node) {
 	});
 }
 Gol.getMatter.dead = Matter.empty;
-Gol.getMatter.live = Matter.texture(Texture.cell, false); // Matter.color(0.1, 0.5, 0.9);
+Gol.getMatter.live = Matter.color(0.3, 0.6, 0.1);

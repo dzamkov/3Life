@@ -48,14 +48,15 @@ var Editor = new function() {
 		this.scale = scale;
 	}
 	
-	// Describes a selection box for an editor. The selection box
-	// covers a rectangular volume, has a primary face (for painting)
-	// and has a scale (for determining the size of units within the box).
-	function Box(bounds, axis, flip, scale) {
-		this.bounds = bounds;
+	// Describes an edit plane for an editor. An edit plane is a "slice" of a
+	// a selection box that can be "painted" on. Edits made on the plane will
+	// extend a certain distance behind the plane, dictated by the plane's "depth".
+	function Plane(box, axis, min, max, flip) {
+		this.box = box;
 		this.axis = axis;
+		this.min = min;
+		this.max = max;
 		this.flip = flip;
-		this.scale = scale;
 	}
 	
 	// Creates a mesh for a line grid. The mesh is on the XY plane, and each square
@@ -89,23 +90,71 @@ var Editor = new function() {
 		 0, 1, 0,
 		 0, 0, 1]];
 		 
-	// Creates and returns a function to draw a wireframe box
-	// with the given parameters. 
-	function prepareDrawLineBox(gl, color, width, bounds) {
-		var program = Program.Line.color.value.get(gl);
+	// Creates and returns a function to draw a selection box.
+	function prepareDrawBox(gl, box) {
 		var drawLineCube = Mesh.lineCube.get(gl);
+		var bounds = box.bounds;
 		var model = mat4.create();
 		mat4.identity(model);
 		mat4.translate(model, bounds.min);
 		mat4.scale(model, Vec3.sub(bounds.max, bounds.min));
+		var scale = box.scale;
+		var program = Program.Line.color.value.get(gl);
 		return function(view, eyePos) {
 			gl.useProgram(program);
-			gl.uniform4fv(program.color, color);
-			gl.uniform1f(program.scale, width);
+			gl.uniform4f(program.color, 0.4, 0.4, 0.4, 1.0);
+			gl.uniform1f(program.scale, scale * 0.04);
 			gl.uniformMatrix4fv(program.model, false, model);
 			gl.uniformMatrix4fv(program.view, false, view);
 			gl.uniform3fv(program.eyePos, eyePos);
 			drawLineCube(program);
+		}
+	}
+	
+	// Creates and returns a function to draw a selection plane.
+	function prepareDrawPlane(gl, plane) {
+		var bounds = plane.box.bounds;
+		var scale = plane.box.scale;
+		var axis = plane.axis;
+		var size = Vec2.sub(Vec3.proj(bounds.max, axis), Vec3.proj(bounds.min, axis));
+		var minPos = Vec3.unproj(Vec3.proj(bounds.min, axis), axis, plane.min);
+		var width = size[0] / scale;
+		var height = size[1] / scale;
+		var drawGrid = lineGridMesh(width, height).create(gl);
+		
+		var permute = mat4.create();
+		mat3.toMat4(permuteMatrices[axis], permute);
+		var primary = mat4.create();
+		mat4.identity(primary);
+		mat4.translate(primary, minPos);
+		mat4.scale(primary, [scale, scale, scale]);
+		mat4.multiply(primary, permute);
+		
+		var secondary = mat4.create();
+		mat4.set(primary, secondary);
+		mat4.translate(secondary, [0, 0, (plane.max - plane.min) / scale]);
+		
+		if (plane.flip) {
+			var temp = primary;
+			primary = secondary;
+			secondary = temp;
+		}
+		
+		var program = Program.Line.color.value.get(gl);
+		return function(view, eyePos) {
+			gl.useProgram(program);
+			gl.uniformMatrix4fv(program.view, false, view);
+			gl.uniform3fv(program.eyePos, eyePos);
+			
+			gl.uniform4f(program.color, 0.1, 0.6, 0.9, 1.0);
+			gl.uniform1f(program.scale, scale * 0.07);
+			gl.uniformMatrix4fv(program.model, false, primary);
+			drawGrid(program);
+			
+			gl.uniform4f(program.color, 0.4, 0.4, 0.4, 1.0);
+			gl.uniform1f(program.scale, scale * 0.04);
+			gl.uniformMatrix4fv(program.model, false, secondary);
+			drawGrid(program);
 		}
 	}
 
@@ -122,7 +171,9 @@ var Editor = new function() {
 		var box = new Box(new Volume.Bound(
 			[10 * t, 10 * t, -20 * t],
 			[30 * t, 30 * t, -16 * t]), t);
-		var drawBox = prepareDrawLineBox(gl, [0.4, 0.4, 0.4, 1.0], t * 0.04, box.bounds);
+		var plane = new Plane(box, 2, -18 * t, -17 * t, true);
+		var drawBox = prepareDrawBox(gl, box);
+		var drawPlane = prepareDrawPlane(gl, plane);
 			
 		// Render the editor view.
 		gl.enable(gl.CULL_FACE);
@@ -139,6 +190,7 @@ var Editor = new function() {
 			var scale = 1.0 / (1 << node.depth);
 			scene.render(gl, view, scale);
 			drawBox(view, camera.pos);
+			drawPlane(view, camera.pos);
 		}, undo);
 		
 		// Handle movement/update.

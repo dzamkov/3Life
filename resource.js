@@ -134,6 +134,8 @@ function Program(shaders, setup) {
 		});
 	}
 	
+	// TODO: Rename view uniforms to viewProj
+	
 	// Contains programs for blocks.
 	this.Block = new function() {
 	

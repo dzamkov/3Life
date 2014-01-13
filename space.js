@@ -102,6 +102,16 @@ function Space(dimension) {
 			}
 			return res;
 		}
+		
+		// Aligns the given vector to grid with units of the given scale. The
+		// returned vector will be the minimum point on the unit the vector is in.
+		function align(vec, scale) {
+			var res = new Array(dimension);
+			for (var i = 0; i < vec.length; i++) {
+				res[i] = scale * Math.floor(vec[i] / scale);
+			}
+			return res;
+		}
 	
 		// Define exports.
 		this.zero = zero;
@@ -114,6 +124,7 @@ function Space(dimension) {
 		this.normalize = normalize;
 		this.proj = proj;
 		this.unproj = unproj;
+		this.align = align;
 	}
 	
 	// Describes an orthogonal hypervolume using a min and
@@ -631,11 +642,24 @@ var Vec3 = Volume.Vector;
 		}
 		return res;
 	}
+	
+	// Determines the point of intersection between a ray and a plane. The parameter of 
+	// the intersection (the 2-vector that can be unprojected from the plane to get the 
+	// point of intersection) will be returned.
+	function intersectPlane(axis, val, pos, dir) {
+		var aDir = dir[axis];
+		if (aDir == 0) return null;
+		var aDis = val - pos[axis];
+		var pPos = Vec3.proj(pos, axis);
+		var pDir = Vec3.proj(dir, axis);
+		return Vec2.add(pPos, Vec2.scale(pDir, aDis / aDir));
+	}
 
 	// Define exports.
 	this.Vector.cross = cross;
 	this.Permutation.sort = sort;
 	this.near = near;
 	this.nearTransformed = nearTransformed;
+	this.intersectPlane = intersectPlane;
 	
 }).call(Volume);

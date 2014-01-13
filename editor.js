@@ -11,17 +11,14 @@ var Editor = new function() {
 			Math.cos(yaw) * Math.cos(pitch),
 			Math.sin(yaw) * Math.cos(pitch),
 			Math.sin(pitch)];
+		this.view = mat4.create();
+		mat4.lookAt(this.view, this.pos,
+			Vec3.add(this.pos, this.foward),
+			Vec3.z);
 	}
 
 	// Define 'Camera' methods.
 	(function() {
-
-		// Gets the view matrix for this camera.
-		this.prototype.getViewMatrix = function() {
-			return mat4.lookAt(this.pos,
-				Vec3.add(this.pos, this.foward),
-				Vec3.z);
-		}
 		
 		// Moves this camera along its horizontal plane.
 		this.prototype.move = function(amt) {
@@ -57,7 +54,23 @@ var Editor = new function() {
 		this.min = min;
 		this.max = max;
 		this.flip = flip;
+		this.pos = flip ? max : min;
 	}
+	
+	// Define 'Plane' methods.
+	(function() {
+	
+		// Gets the bounds for the block at the given (2d) position on this plane, 
+		// returning null if the position is outside the bounds of this plane.
+		this.prototype.getBlock = function(pos) {
+			var scale = this.box.scale;
+			var pMin = Vec2.align(pos, scale);
+			var pMax = Vec2.add(pMin, [scale, scale]);
+			var min = Vec3.unproj(pMin, this.axis, this.min);
+			var max = Vec3.unproj(pMax, this.axis, this.max);
+			return new Volume.Bound(min, max);
+		}
+	}).call(Plane);
 	
 	// Creates a mesh for a line grid. The mesh is on the XY plane, and each square
 	// on the grid is 1 by 1. The lines have a width of 1.
@@ -80,15 +93,18 @@ var Editor = new function() {
 	// will rotate it so that its normal is along the axis corresponding
 	// to the matrix index.
 	var permuteMatrices = [
-		[0, 1, 0,
-		 0, 0, 1,
-		 1, 0, 0],
-		[0, 0, 1,
-		 1, 0, 0,
-		 0, 1, 0],
-		[1, 0, 0,
-		 0, 1, 0,
-		 0, 0, 1]];
+		[0, 1, 0, 0,
+		 0, 0, 1, 0,
+		 1, 0, 0, 0,
+		 0, 0, 0, 1],
+		[0, 0, 1, 0,
+		 1, 0, 0, 0,
+		 0, 1, 0, 0,
+		 0, 0, 0, 1],
+		[1, 0, 0, 0,
+		 0, 1, 0, 0,
+		 0, 0, 1, 0,
+		 0, 0, 0, 1]];
 		 
 	// Creates and returns a function to draw a selection box.
 	function prepareDrawBox(gl, box) {
@@ -96,8 +112,8 @@ var Editor = new function() {
 		var bounds = box.bounds;
 		var model = mat4.create();
 		mat4.identity(model);
-		mat4.translate(model, bounds.min);
-		mat4.scale(model, Vec3.sub(bounds.max, bounds.min));
+		mat4.translate(model, model, bounds.min);
+		mat4.scale(model, model, Vec3.sub(bounds.max, bounds.min));
 		var scale = box.scale;
 		var program = Program.Line.color.value.get(gl);
 		return function(view, eyePos) {
@@ -125,20 +141,18 @@ var Editor = new function() {
 		var drawGrid = lineGridMesh(width, height).create(gl);
 		var drawSquare = Mesh.Line.square.get(gl);
 		
-		var permute = mat4.create();
-		mat3.toMat4(permuteMatrices[axis], permute);
 		var primary = mat4.create();
 		mat4.identity(primary);
-		mat4.translate(primary, primaryPos);
-		mat4.scale(primary, [scale, scale, scale]);
-		mat4.multiply(primary, permute);
+		mat4.translate(primary, primary, primaryPos);
+		mat4.scale(primary, primary, [scale, scale, scale]);
+		mat4.multiply(primary, primary, permuteMatrices[axis]);
 		
 		var secondary = mat4.create();
 		mat4.identity(secondary);
-		mat4.translate(secondary, secondaryPos);
-		mat4.scale(secondary, [scale, scale, scale]);
-		mat4.multiply(secondary, permute);
-		mat4.scale(secondary, [width, height, 1.0]);
+		mat4.translate(secondary, secondary, secondaryPos);
+		mat4.scale(secondary, secondary, [scale, scale, scale]);
+		mat4.multiply(secondary, secondary, permuteMatrices[axis]);
+		mat4.scale(secondary, secondary, [width, height, 1.0]);
 		
 		var program = Program.Line.color.value.get(gl);
 		return function(view, eyePos) {
@@ -163,8 +177,8 @@ var Editor = new function() {
 		var drawCube = Mesh.Block.cube.get(gl);
 		var model = mat4.create();
 		mat4.identity(model);
-		mat4.translate(model, bounds.min);
-		mat4.scale(model, Vec3.sub(bounds.max, bounds.min));
+		mat4.translate(model, model, bounds.min);
+		mat4.scale(model, model, Vec3.sub(bounds.max, bounds.min));
 		var program = Program.Block.color.value.get(gl);
 		return function(view) {
 			gl.useProgram(program);
@@ -172,9 +186,11 @@ var Editor = new function() {
 			gl.uniformMatrix4fv(program.model, false, model);
 			gl.uniformMatrix4fv(program.view, false, view);
 			gl.enable(gl.BLEND);
+			gl.disable(gl.DEPTH_TEST);
 			gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 			drawCube(program);
 			gl.disable(gl.BLEND);
+			gl.enable(gl.DEPTH_TEST);
 		}
 	}
 
@@ -196,6 +212,40 @@ var Editor = new function() {
 		var drawBox = prepareDrawBox(gl, box);
 		var drawPlane = prepareDrawPlane(gl, plane);
 		var drawBlock = prepareDrawBlock(gl, block);
+		
+		// Gets the current viewProj matrix.
+		function getViewProj() {
+			var proj = mat4.create();
+			var viewProj = mat4.create();
+			mat4.perspective(proj, 45, canvas.width / canvas.height, 0.001, 2.0);
+			mat4.multiply(viewProj, proj, camera.view);
+			return viewProj;
+		}
+		
+		// Handle mouse picking.
+		Event.register(canvas, 'mousemove', function(event) {
+			var x = event.clientX;
+			var y = event.clientY;
+			x = x * 2.0 / canvas.width - 1.0;
+			y = 1.0 - y * 2.0 / canvas.height;
+			
+			var viewProj = getViewProj();
+			var iViewProj = mat4.create();
+			mat4.invert(iViewProj, viewProj);
+			
+			var pos = [x, y, 0, 1];
+			vec4.transformMat4(pos, pos, iViewProj);
+			pos = Vec3.scale(pos, 1.0 / pos[3]);
+			
+			var dir = [x, y, 1, 1];
+			vec4.transformMat4(dir, dir, iViewProj);
+			dir = Vec3.scale(dir, 1.0 / dir[3]);
+			dir = Vec3.normalize(Vec3.sub(dir, pos));
+			
+			var res = Volume.intersectPlane(plane.axis, plane.pos, pos, dir);
+			block = plane.getBlock(res);
+			drawBlock = prepareDrawBlock(gl, block);
+		});
 			
 		// Render the editor view.
 		gl.enable(gl.CULL_FACE);
@@ -205,15 +255,12 @@ var Editor = new function() {
 			gl.clearColor(0.0, 0.0, 0.0, 1.0);
 			gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 			
-			var view = mat4.create();
-			mat4.multiply(mat4.perspective(45, canvas.width / canvas.height, 0.001, 2.0),
-				camera.getViewMatrix(), view);
-			
+			var viewProj = getViewProj();
 			var scale = 1.0 / (1 << node.depth);
-			scene.render(gl, view, scale);
-			drawBox(view, camera.pos);
-			drawPlane(view, camera.pos);
-			drawBlock(view);
+			scene.render(gl, viewProj, scale);
+			drawBox(viewProj, camera.pos);
+			drawPlane(viewProj, camera.pos);
+			drawBlock(viewProj);
 		}, undo);
 		
 		// Handle movement/update.

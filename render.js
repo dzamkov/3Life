@@ -391,8 +391,11 @@ var Render = new function() {
 						gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 					}
 					gl.useProgram(program);
+					var model = mat4.create();
+					mat4.identity(model);
+					gl.uniformMatrix4fv(program.model, false, model);
 					gl.uniformMatrix4fv(program.view, false, view);
-					gl.uniform1f(program.scale, scale);
+					if (program.scale) gl.uniform1f(program.scale, scale);
 					procedure.setUniforms(program, gl);
 					buffer.bind(gl);
 					gl.enableVertexAttribArray(program.pos);

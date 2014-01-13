@@ -139,8 +139,8 @@ function Program(shaders, setup) {
 	
 		// Sets up the uniforms and attributes that are common between block programs.
 		function setupCommon(program, gl) {
+			program.model = gl.getUniformLocation(program, "model");
 			program.view = gl.getUniformLocation(program, "view");
-			program.scale = gl.getUniformLocation(program, "scale");
 			program.pos = gl.getAttribLocation(program, "pos");
 			program.norm = gl.getAttribLocation(program, "norm");
 		}
@@ -153,6 +153,7 @@ function Program(shaders, setup) {
 		
 		// A promise for a textured block program.
 		this.texture = request([Shader.Block.vertex, Shader.Block.texture], function(program, gl) {
+			program.scale = gl.getUniformLocation(program, "scale");
 			program.texture = gl.getUniformLocation(program, "texture");
 			setupCommon(program, gl);
 		});
@@ -423,30 +424,70 @@ function Mesh(mode, vertexData, indexData, vertexSize, attributes) {
 		return create(mode, vertexData, indexData, vertexSize, attributes);
 	}
 	
-	// A mesh for a unit cube between (0, 0, 0) and (1, 1, 1) constructed out of 
-	// lines of width 1.
-	var lineCube = createBuilder(Mode.Triangles, 7, {
-		pos : { size : 3, offset : 0 },
-		dir : { size : 3, offset : 3 },
-		offset : { size : 1, offset : 6 }
-	}, function(builder) {
-		for (var axis = 0; axis < 3; axis++) {
-			var dir = Vec3.unproj(Vec2.zero, axis, 1);
-			for (var i = 0; i < 2; i++) {
-				for (var j = 0; j < 2; j++) {
-					var vec = [i, j];
-					var from = Vec3.unproj(vec, axis, 0);
-					var to = Vec3.unproj(vec, axis, 1);
-					builder.line(from, to, 0.5, dir);
+	// Contains common meshes for block shader programs.
+	this.Block = new function() {
+	
+		// A mesh for a unit cube between (0, 0, 0) and (1, 1, 1).
+		this.cube = createBuilder(Mode.Triangles, 6, {
+			pos : { size : 3, offset : 0 },
+			norm : { size : 3, offset : 3 }
+		}, function(builder) {
+			for (var axis = 0; axis < 3; axis++) {
+				for (var i = 0; i < 2; i++) {
+					var norm = Vec3.unproj(Vec2.zero, axis, (i == 1) ? 1 : -1);
+					var a = builder.vertex(Vec3.unproj([0, 0], axis, i), norm);
+					var b = builder.vertex(Vec3.unproj([0, 1], axis, i), norm);
+					var c = builder.vertex(Vec3.unproj([1, 0], axis, i), norm);
+					var d = builder.vertex(Vec3.unproj([1, 1], axis, i), norm);
+					if (i == 0) builder.quad(a, b, c, d); else builder.quad(a, c, b, d);
 				}
 			}
-		}
-	});
-
+		});
+	
+	}
+	
+	// Contains common meshes for line shader programs.
+	this.Line = new function() {
+	
+		// A mesh for a unit cube between (0, 0, 0) and (1, 1, 1) constructed out of 
+		// lines of width 1.
+		this.cube = createBuilder(Mode.Triangles, 7, {
+			pos : { size : 3, offset : 0 },
+			dir : { size : 3, offset : 3 },
+			offset : { size : 1, offset : 6 }
+		}, function(builder) {
+			for (var axis = 0; axis < 3; axis++) {
+				var dir = Vec3.unproj(Vec2.zero, axis, 1);
+				for (var i = 0; i < 2; i++) {
+					for (var j = 0; j < 2; j++) {
+						var vec = [i, j];
+						var from = Vec3.unproj(vec, axis, 0);
+						var to = Vec3.unproj(vec, axis, 1);
+						builder.line(from, to, 0.5, dir);
+					}
+				}
+			}
+		});
+		
+		// A mesh for a unit square between (0, 0) and (1, 1) constructed out of
+		// lines of width 1.
+		this.square = createBuilder(Mode.Triangles, 5, {
+			pos : { size : 2, offset : 0 },
+			dir : { size : 2, offset : 2 },
+			offset : { size : 1, offset : 4 }
+		}, function(builder) {
+			builder.line([0, 0], [0, 1], 0.5, [0, 1]);
+			builder.line([1, 0], [1, 1], 0.5, [0, 1]);
+			builder.line([0, 0], [1, 0], 0.5, [1, 0]);
+			builder.line([0, 1], [1, 1], 0.5, [1, 0]);
+		});
+	}
+	
 	// Define exports.
 	this.Mode = Mode;
+	this.enableAttributes = enableAttributes;
+	this.disableAttributes = disableAttributes;
 	this.create = create;
 	this.createExpanded = createExpanded;
 	this.createBuilder = createBuilder;
-	this.lineCube = lineCube;
 }).call(Mesh);

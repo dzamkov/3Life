@@ -1,12 +1,12 @@
 precision mediump float;
 uniform sampler2D texture;
 uniform float scale; 
-varying vec3 fpos;
-varying vec3 fnorm;
+varying vec3 wpos;
+varying vec3 wnorm;
 void main(void) {
 	vec3 light = normalize(vec3(0.3, 0.5, 1.0));
-	float adjust = dot(fnorm, light) * 0.1;
-	vec2 uv = fpos.xy * fnorm.z + fpos.yz * fnorm.x + fpos.zx * fnorm.y;
+	float adjust = dot(wnorm, light) * 0.1;
+	vec2 uv = wpos.xy * wnorm.z + wpos.yz * wnorm.x + wpos.zx * wnorm.y;
 	uv = uv / scale;
 	vec4 color = texture2D(texture, uv);
 	gl_FragColor = vec4(

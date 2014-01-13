@@ -92,7 +92,7 @@ var Editor = new function() {
 		 
 	// Creates and returns a function to draw a selection box.
 	function prepareDrawBox(gl, box) {
-		var drawLineCube = Mesh.lineCube.get(gl);
+		var drawCube = Mesh.Line.cube.get(gl);
 		var bounds = box.bounds;
 		var model = mat4.create();
 		mat4.identity(model);
@@ -107,7 +107,7 @@ var Editor = new function() {
 			gl.uniformMatrix4fv(program.model, false, model);
 			gl.uniformMatrix4fv(program.view, false, view);
 			gl.uniform3fv(program.eyePos, eyePos);
-			drawLineCube(program);
+			drawCube(program);
 		}
 	}
 	
@@ -116,29 +116,29 @@ var Editor = new function() {
 		var bounds = plane.box.bounds;
 		var scale = plane.box.scale;
 		var axis = plane.axis;
-		var size = Vec2.sub(Vec3.proj(bounds.max, axis), Vec3.proj(bounds.min, axis));
-		var minPos = Vec3.unproj(Vec3.proj(bounds.min, axis), axis, plane.min);
+		var basePos = Vec3.proj(bounds.min, axis);
+		var size = Vec2.sub(Vec3.proj(bounds.max, axis), basePos);
+		var primaryPos = Vec3.unproj(basePos, axis, plane.flip ? plane.max : plane.min);
+		var secondaryPos = Vec3.unproj(basePos, axis, plane.flip ? plane.min : plane.max);
 		var width = size[0] / scale;
 		var height = size[1] / scale;
 		var drawGrid = lineGridMesh(width, height).create(gl);
+		var drawSquare = Mesh.Line.square.get(gl);
 		
 		var permute = mat4.create();
 		mat3.toMat4(permuteMatrices[axis], permute);
 		var primary = mat4.create();
 		mat4.identity(primary);
-		mat4.translate(primary, minPos);
+		mat4.translate(primary, primaryPos);
 		mat4.scale(primary, [scale, scale, scale]);
 		mat4.multiply(primary, permute);
 		
 		var secondary = mat4.create();
-		mat4.set(primary, secondary);
-		mat4.translate(secondary, [0, 0, (plane.max - plane.min) / scale]);
-		
-		if (plane.flip) {
-			var temp = primary;
-			primary = secondary;
-			secondary = temp;
-		}
+		mat4.identity(secondary);
+		mat4.translate(secondary, secondaryPos);
+		mat4.scale(secondary, [scale, scale, scale]);
+		mat4.multiply(secondary, permute);
+		mat4.scale(secondary, [width, height, 1.0]);
 		
 		var program = Program.Line.color.value.get(gl);
 		return function(view, eyePos) {
@@ -154,7 +154,27 @@ var Editor = new function() {
 			gl.uniform4f(program.color, 0.4, 0.4, 0.4, 1.0);
 			gl.uniform1f(program.scale, scale * 0.04);
 			gl.uniformMatrix4fv(program.model, false, secondary);
-			drawGrid(program);
+			drawSquare(program);
+		}
+	}
+	
+	// Creates and returns a function to draw a selection block.
+	function prepareDrawBlock(gl, bounds) {
+		var drawCube = Mesh.Block.cube.get(gl);
+		var model = mat4.create();
+		mat4.identity(model);
+		mat4.translate(model, bounds.min);
+		mat4.scale(model, Vec3.sub(bounds.max, bounds.min));
+		var program = Program.Block.color.value.get(gl);
+		return function(view) {
+			gl.useProgram(program);
+			gl.uniform4f(program.color, 0.7, 0.7, 0.7, 0.5);
+			gl.uniformMatrix4fv(program.model, false, model);
+			gl.uniformMatrix4fv(program.view, false, view);
+			gl.enable(gl.BLEND);
+			gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+			drawCube(program);
+			gl.disable(gl.BLEND);
 		}
 	}
 
@@ -171,9 +191,11 @@ var Editor = new function() {
 		var box = new Box(new Volume.Bound(
 			[10 * t, 10 * t, -20 * t],
 			[30 * t, 30 * t, -16 * t]), t);
-		var plane = new Plane(box, 2, -18 * t, -17 * t, true);
+		var plane = new Plane(box, 2, -19 * t, -17 * t, true);
+		var block = new Volume.Bound([12 * t, 25 * t, -19 * t], [13 * t, 26 * t, -17 * t]);
 		var drawBox = prepareDrawBox(gl, box);
 		var drawPlane = prepareDrawPlane(gl, plane);
+		var drawBlock = prepareDrawBlock(gl, block);
 			
 		// Render the editor view.
 		gl.enable(gl.CULL_FACE);
@@ -191,6 +213,7 @@ var Editor = new function() {
 			scene.render(gl, view, scale);
 			drawBox(view, camera.pos);
 			drawPlane(view, camera.pos);
+			drawBlock(view);
 		}, undo);
 		
 		// Handle movement/update.

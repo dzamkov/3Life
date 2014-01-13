@@ -64,12 +64,18 @@ var Editor = new function() {
 		// returning null if the position is outside the bounds of this plane.
 		this.prototype.getBlock = function(pos) {
 			var scale = this.box.scale;
+			var bounds = this.box.bounds;
 			var pMin = Vec2.align(pos, scale);
-			var pMax = Vec2.add(pMin, [scale, scale]);
-			var min = Vec3.unproj(pMin, this.axis, this.min);
-			var max = Vec3.unproj(pMax, this.axis, this.max);
-			return new Volume.Bound(min, max);
+			var bpMin = Vec3.proj(bounds.min, this.axis);
+			var bpMax = Vec3.proj(bounds.max, this.axis);
+			if (pMin[0] >= bpMin[0] && pMin[1] >= bpMin[1] && pMin[0] < bpMax[0] && pMin[1] < bpMax[1]) {
+				var pMax = Vec2.add(pMin, [scale, scale]);
+				var min = Vec3.unproj(pMin, this.axis, this.min);
+				var max = Vec3.unproj(pMax, this.axis, this.max);
+				return new Volume.Bound(min, max);
+			} else return null;
 		}
+
 	}).call(Plane);
 	
 	// Creates a mesh for a line grid. The mesh is on the XY plane, and each square
@@ -243,8 +249,11 @@ var Editor = new function() {
 			dir = Vec3.normalize(Vec3.sub(dir, pos));
 			
 			var res = Volume.intersectPlane(plane.axis, plane.pos, pos, dir);
-			block = plane.getBlock(res);
-			drawBlock = prepareDrawBlock(gl, block);
+			var nBlock = plane.getBlock(res);
+			if (nBlock) {
+				block = plane.getBlock(res);
+				drawBlock = prepareDrawBlock(gl, block);
+			}
 		});
 			
 		// Render the editor view.
@@ -258,9 +267,9 @@ var Editor = new function() {
 			var viewProj = getViewProj();
 			var scale = 1.0 / (1 << node.depth);
 			scene.render(gl, viewProj, scale);
+			drawBlock(viewProj);
 			drawBox(viewProj, camera.pos);
 			drawPlane(viewProj, camera.pos);
-			drawBlock(viewProj);
 		}, undo);
 		
 		// Handle movement/update.

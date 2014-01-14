@@ -77,6 +77,15 @@ function Space(dimension) {
 			return Math.sqrt(sqrLen);
 		}
 		
+		// Applies a scale, then a translation, to the given vector.
+		function transform(vec, scale, offset) {
+			var res = new Array(dimension);
+			for (var i = 0; i < dimension; i++) {
+				res[i] = vec[i] * scale + offset[i];
+			}
+			return res;
+		}
+		
 		// Normalizes a vector.
 		function normalize(vec) {
 			return scale(vec, 1.0 / len(vec));
@@ -121,6 +130,7 @@ function Space(dimension) {
 		this.abs = abs;
 		this.scale = scale;
 		this.len = len;
+		this.transform = transform;
 		this.normalize = normalize;
 		this.proj = proj;
 		this.unproj = unproj;
@@ -140,7 +150,8 @@ function Space(dimension) {
 	(function() {
 		
 		// Construct a unit (edge-length 1) bound centered
-		// on the origin.
+		// on the origin. This defines the local coordinate system
+		// for a node of this dimension.
 		var min = new Array(dimension);
 		var max = new Array(dimension);
 		for (var i = 0; i < dimension; i++) {
@@ -165,12 +176,30 @@ function Space(dimension) {
 		// this bound.
 		this.prototype.transform = function(scale, offset) {
 			return new Bound(
-				this.min.scale(scale).add(offset),
-				this.max.scale(scale).add(offset));
+				Vector.transform(this.min, scale, offset),
+				Vector.transform(this.max, scale, offset));
+		}
+		
+		// Determines whether this bound fully contains the given bound.
+		this.prototype.contains = function(other) {
+			for (var i = 0; i < dimension; i++) {
+				if (this.min[i] > other.min[i]) return false;
+				if (this.max[i] < other.max[i]) return false;
+			}
+			return true;
+		}
+		
+		// Determines whether this bound intersects the given bound.
+		this.prototype.intersects = function(other) {
+			for (var i = 0; i < dimension; i++) {
+				if (this.min[i] >= other.max[i]) return false;
+				if (this.max[i] <= other.min[i]) return false;
+			}
+			return true;
 		}
 
 		// Determines whether this bound shares an edge/face with
-		// a containing bound. (Pronounced like "coincide"; this is
+		// a containing bound. (Pronounced like "coincide". this is
 		// indeed a pun).
 		this.prototype.isCoinside = function(container) {
 			for (var i = 0; i < dimension; i++) {
@@ -351,6 +380,25 @@ function Space(dimension) {
 	// Calculate the amount of children each node in this dimension has.
 	var size = 1 << dimension;
 	
+	// Contains the offsets of the centers of child nodes from their parent, assuming
+	// the parent occupies the hyper-volume defined by 'Bound.unit'.
+	var offsets = new Array(size);
+	for (var i = 0; i < size; i++) {
+		offsets[i] = new Array(dimension);
+		for (var j = 0; j < dimension; j++) {
+			offsets[i][j] = ((i & (1 << j)) != 0) ? 0.25 : -0.25;
+		}
+	}
+	
+	// Contains the inverses of the offsets in 'offsets'.
+	var iOffsets = offsets.map(function(vec) { return Vector.scale(vec, -2.0); });
+	
+	// Gets the offset for a child node of the given index of
+	// a parent node with the given scale and offset.
+	function getOffset(scale, offset, index) {
+		return Vector.add(Vector.scale(offsets[index], scale), offset);
+	}
+	
 	// Constructs a type that represents a subdivided hypercube in this space.
 	// The hypercube is divided into two halves on each axis and stores a 
 	// description of the contents of each sector in the resulting subdivision.
@@ -421,6 +469,21 @@ function Space(dimension) {
 				return get(this.children.map(mapChild));
 			}
 			
+			// Replaces all sub-nodes within the given bound (in unit coordinates) with
+			// the corresponding sub-nodes from the given target node.
+			this.prototype.splice = function(bound, target) {
+				if (bound.contains(Bound.unit)) return target;
+				if (bound.intersects(Bound.unit)) {
+					var children = new Array(size);
+					for (var i = 0; i < children.length; i++) {
+						children[i] = this.children[i].splice(
+							bound.transform(2.0, iOffsets[i]),
+							target.children[i]);
+					}
+					return get(children);
+				} else return this;
+			}
+			
 		}).call(_Node);
 		
 		// Define type exports.
@@ -437,22 +500,6 @@ function Space(dimension) {
 	Boolean.false = Boolean.leaf();
 	delete Boolean.leaf;
 	
-	// Contains the offsets of the centers of child nodes from their parent, assuming
-	// the parent occupies the hyper-volume defined by 'Bound.unit'.
-	var offsets = new Array(size);
-	for (var i = 0; i < size; i++) {
-		offsets[i] = new Array(dimension);
-		for (var j = 0; j < dimension; j++) {
-			offsets[i][j] = ((i & (1 << j)) != 0) ? 0.25 : -0.25;
-		}
-	}
-	
-	// Gets the offset for a child node of the given index of
-	// a parent node with the given scale and offset.
-	function getOffset(scale, offset, index) {
-		return Vector.add(Vector.scale(offsets[index], scale), offset);
-	}
-	
 	// Define exports.
 	this.Vector = Vector;
 	this.Bound = Bound;
@@ -462,6 +509,7 @@ function Space(dimension) {
 	this.dimension = dimension;
 	this.vec = Vector.create;
 	this.offsets = offsets;
+	this.iOffsets = iOffsets;
 	this.getOffset = getOffset;
 };
 

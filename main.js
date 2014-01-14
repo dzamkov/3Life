@@ -25,9 +25,9 @@ function init() {
 			elapsedTime -= 1.0;
 			elapsedFrames = 0;
 		}
-		Callback.invoke(Callback.render);
-		Callback.invoke(Callback.input, 1.0 / 60.0);
 		Callback.invoke(Callback.update, 1.0 / 60.0);
+		Callback.invoke(Callback.input, 1.0 / 60.0);
+		Callback.invoke(Callback.render);
 		requestAnimationFrame(animate);
 	})();
 	

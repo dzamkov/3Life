@@ -17,10 +17,10 @@
 		return [
 			this.movementX ||
 			this.mozMovementX ||
-			this.webkitMovementX,
+			this.webkitMovementX || 0,
 			this.movementY ||
 			this.mozMovementY ||
-			this.webkitMovementY];
+			this.webkitMovementY || 0];
 	}
 })();
 

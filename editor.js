@@ -203,7 +203,7 @@ var Editor = new function() {
 	// Creates an editor interface for a canvas.
 	this.create = function(canvas, node, undo) {
 		var gl = createGLContext(canvas);
-		var camera = new Camera([-0.5, 0.0, 0.6], 0.0, -0.5); 
+		var camera = new Camera([0.0, 0.15, 0.0], 0.0, -0.8); 
 		var scene = new Render.Scene();
 		var renderer = new Render.Direct(Volume, scene.pushMatterLeaf.bind(scene));
 		renderer.set(node);
@@ -255,6 +255,13 @@ var Editor = new function() {
 				drawBlock = prepareDrawBlock(gl, block);
 			}
 		});
+		
+		// Drawing.
+		Input.Trigger.mouseButton(0, true).register(canvas, function() {
+			node = node.splice(block, Gol.getMatter.live);
+			renderer.update(node);
+			scene.flush(gl);
+		});
 			
 		// Render the editor view.
 		gl.enable(gl.CULL_FACE);
@@ -303,7 +310,7 @@ var Editor = new function() {
 			Input.Trigger.mouseButton(2, false))
 		.register(canvas, function(rotate) {
 			var scale = 0.003;
-			camera = camera.rotate(Vec2.scale(rotate, scale), Math.PI * 0.4);
+			camera = camera.rotate(Vec2.scale(rotate, scale), Math.PI * 0.9);
 		});
 	}
 	

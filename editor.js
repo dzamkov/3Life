@@ -123,30 +123,9 @@ var Editor = new function() {
 	delay(Program.Block.color, function(program) {
 		blockProgram = program;
 	}, resources);
-		 
-	// Creates and returns a function to draw a selection box.
-	function prepareDrawBox(gl, box) {
-		var drawCube = Mesh.Line.cube.get(gl);
-		var bounds = box.bounds;
-		var model = mat4.create();
-		mat4.identity(model);
-		mat4.translate(model, model, bounds.min);
-		mat4.scale(model, model, Vec3.sub(bounds.max, bounds.min));
-		var scale = box.scale;
-		var program = lineProgram.get(gl);
-		return function(view, eyePos) {
-			gl.useProgram(program);
-			gl.uniform4f(program.color, 0.4, 0.4, 0.4, 1.0);
-			gl.uniform1f(program.scale, scale * 0.04);
-			gl.uniformMatrix4fv(program.model, false, model);
-			gl.uniformMatrix4fv(program.view, false, view);
-			gl.uniform3fv(program.eyePos, eyePos);
-			drawCube(program);
-		}
-	}
-	
-	// Creates and returns a function to draw a selection plane.
-	function prepareDrawPlane(gl, plane) {
+
+	// Creates and returns a function to render a selection plane.
+	function prepareRenderPlane(gl, plane) {
 		var bounds = plane.box.bounds;
 		var scale = plane.box.scale;
 		var axis = plane.axis;
@@ -173,43 +152,59 @@ var Editor = new function() {
 		mat4.scale(secondary, secondary, [width, height, 1.0]);
 		
 		var program = lineProgram.get(gl);
+		var gridMesh = lineGridMesh(width, height).create(gl);
+		var squareMesh = Mesh.Line.square.get(gl);
 		return function(view, eyePos) {
-			gl.useProgram(program);
-			gl.uniformMatrix4fv(program.view, false, view);
-			gl.uniform3fv(program.eyePos, eyePos);
-			
-			gl.uniform4f(program.color, 0.1, 0.6, 0.9, 1.0);
-			gl.uniform1f(program.scale, scale * 0.07);
-			gl.uniformMatrix4fv(program.model, false, primary);
-			drawGrid(program);
-			
-			gl.uniform4f(program.color, 0.4, 0.4, 0.4, 1.0);
-			gl.uniform1f(program.scale, scale * 0.04);
-			gl.uniformMatrix4fv(program.model, false, secondary);
-			drawSquare(program);
+			gl.render(program, gridMesh, {
+				color : [0.1, 0.6, 0.9, 1.0],
+				scale : scale * 0.07,
+				model : primary,
+				view : view, // TODO: Rename view uniforms to viewProj
+				eyePos : eyePos });
+			gl.render(program, squareMesh, {
+				color : [0.4, 0.4, 0.4, 1.0],
+				scale : scale * 0.04,
+				model : secondary,
+				view : view,
+				eyePos : eyePos });
 		}
 	}
 	
-	// Creates and returns a function to draw a selection block.
-	function prepareDrawBlock(gl, bounds) {
-		var drawCube = Mesh.Block.cube.get(gl);
+	// Renders a selection box.
+	function renderBox(gl, box, view, eyePos) {
+		var bounds = box.bounds;
+		var model = mat4.create();
+		mat4.identity(model);
+		mat4.translate(model, model, bounds.min);
+		mat4.scale(model, model, Vec3.sub(bounds.max, bounds.min));
+		var scale = box.scale;
+		var program = lineProgram.get(gl);
+		var mesh = Mesh.Line.cube.get(gl);
+		gl.render(program, mesh, {
+			color : [0.4, 0.4, 0.4, 1.0],
+			scale : [scale * 0.04],
+			model : model,
+			view : view,
+			eyePos : eyePos });
+	}
+	
+	// Renders a selection block.
+	function renderBlock(gl, bounds, view) {
 		var model = mat4.create();
 		mat4.identity(model);
 		mat4.translate(model, model, bounds.min);
 		mat4.scale(model, model, Vec3.sub(bounds.max, bounds.min));
 		var program = blockProgram.get(gl);
-		return function(view) {
-			gl.useProgram(program);
-			gl.uniform4f(program.color, 0.7, 0.7, 0.7, 0.5);
-			gl.uniformMatrix4fv(program.model, false, model);
-			gl.uniformMatrix4fv(program.view, false, view);
-			gl.enable(gl.BLEND);
-			gl.disable(gl.DEPTH_TEST);
-			gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-			drawCube(program);
-			gl.disable(gl.BLEND);
-			gl.enable(gl.DEPTH_TEST);
-		}
+		var mesh = Mesh.Block.cube.get(gl);
+		gl.enable(gl.BLEND);
+		gl.disable(gl.DEPTH_TEST);
+		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+		gl.render(program, mesh, {
+			color : [0.7, 0.7, 0.7, 0.5],
+			model : model,
+			view : view });
+		gl.disable(gl.BLEND);
+		gl.enable(gl.DEPTH_TEST);
 	}
 
 	// Creates an editor interface for a canvas.
@@ -220,16 +215,13 @@ var Editor = new function() {
 		var renderer = new Render.Direct(Volume, scene.pushMatterLeaf.bind(scene));
 		renderer.set(node);
 		scene.flush(gl);
-		
 		var t = 1.0 / (1 << 7);
 		var box = new Box(new Volume.Bound(
 			[10 * t, 10 * t, -20 * t],
 			[30 * t, 30 * t, -16 * t]), t);
 		var plane = new Plane(box, 2, -19 * t, -17 * t, true);
 		var block = new Volume.Bound([12 * t, 25 * t, -19 * t], [13 * t, 26 * t, -17 * t]);
-		var drawBox = prepareDrawBox(gl, box);
-		var drawPlane = prepareDrawPlane(gl, plane);
-		var drawBlock = prepareDrawBlock(gl, block);
+		var renderPlane = prepareRenderPlane(gl, plane);
 		
 		// Gets the current viewProj matrix.
 		function getViewProj() {
@@ -262,10 +254,7 @@ var Editor = new function() {
 			
 			var res = Volume.intersectPlane(plane.axis, plane.pos, pos, dir);
 			var nBlock = plane.getBlock(res);
-			if (nBlock) {
-				block = plane.getBlock(res);
-				drawBlock = prepareDrawBlock(gl, block);
-			}
+			if (nBlock) block = nBlock;
 		});
 		
 		// Drawing.
@@ -286,9 +275,9 @@ var Editor = new function() {
 			var viewProj = getViewProj();
 			var scale = 1.0 / (1 << node.depth);
 			scene.render(gl, viewProj, scale);
-			drawBlock(viewProj);
-			drawBox(viewProj, camera.pos);
-			drawPlane(viewProj, camera.pos);
+			renderBlock(gl, block, viewProj);
+			renderBox(gl, box, viewProj, camera.pos);
+			renderPlane(viewProj, camera.pos);
 		}, undo);
 		
 		// Handle movement/update.

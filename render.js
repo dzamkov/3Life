@@ -388,19 +388,21 @@ var Render = new function() {
 					gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 				}
 				gl.useProgram(program);
+				buffer.bind(gl);
 				var model = mat4.create();
 				mat4.identity(model);
-				gl.uniformMatrix4fv(program.model, false, model);
-				gl.uniformMatrix4fv(program.view, false, view);
-				mat.setupUniforms(gl, program);
-				buffer.bind(gl);
-				gl.enableVertexAttribArray(program.pos);
-				gl.enableVertexAttribArray(program.norm);
-				gl.vertexAttribPointer(program.pos, 3, gl.FLOAT, false, 6 * 4, 0);
-				gl.vertexAttribPointer(program.norm, 3, gl.FLOAT, false, 6 * 4, 3 * 4);
+				mat.setupTextures(gl);
+				gl.setConstants(program.variables, {
+					model : model,
+					view : view,
+					__proto__ : mat.constants
+				});
+				gl.enableAttributes(program.variables, 6, {
+					pos : { size : 3, offset : 0 },
+					norm : { size : 3, offset : 3 }
+				});
 				buffer.draw(gl, gl.TRIANGLES, 6);
-				gl.disableVertexAttribArray(program.pos);
-				gl.disableVertexAttribArray(program.norm);
+				gl.disableAttributes(program.variables);
 				gl.disable(gl.BLEND);
 			});
 		}

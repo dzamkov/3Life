@@ -1,7 +1,7 @@
 precision mediump float;
 uniform sampler2D texture;
 uniform float scale;
-uniform float offset; 
+uniform vec3 offset; 
 varying vec3 wpos;
 varying vec3 wnorm;
 void main(void) {

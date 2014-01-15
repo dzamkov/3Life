@@ -102,10 +102,9 @@ function Shader(source, type) {
 }).call(Shader);
 
 // Describes a shader program independently from a graphics context.
-function Program(shaders, setup) {
+function Program(shaders) {
 	Resource.call(this);
 	this.shaders = shaders;
-	this.setup = setup;
 }
 
 // Define 'Program' functions.
@@ -122,71 +121,60 @@ function Program(shaders, setup) {
 		if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
 			throw "Program Link Error: " + gl.getProgramParameter(program, gl.VALIDATE_STATUS);
 		}
-		this.setup(program, gl);
+		
+		// Enumerate variables (uniforms and attributes).
+		var variables = { };
+		var uniformCount = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS);
+		var attributeCount = gl.getProgramParameter(program, gl.ACTIVE_ATTRIBUTES);
+		for (var i = 0; i < uniformCount; i++) {
+			var info = gl.getActiveUniform(program, i);
+			variables[info.name] = {
+				size : info.size,
+				type : info.type,
+				isAttribute : false,
+				location : gl.getUniformLocation(program, info.name)
+			};
+		}
+		for (var i = 0; i < attributeCount; i++) {
+			var info = gl.getActiveAttrib(program, i);
+			variables[info.name] = {
+				size : info.size,
+				type : info.type,
+				isAttribute : true,
+				location : gl.getAttribLocation(program, info.name)
+			};
+		}
+		
+		program.variables = variables;
 		return program;
 	}
 	
 	// Creates a promise for a program given a set of promises for
-	// its constituent shaders and a static setup function.
-	function request(shaders, setup) {
+	// its constituent shaders.
+	function request(shaders) {
 		return Promise.join(shaders).map(function(shaders) {
-			return new Program(shaders, setup);
+			return new Program(shaders);
 		});
 	}
 	
-	// TODO: Rename view uniforms to viewProj
-	
 	// Contains programs for blocks.
 	this.Block = new function() {
-	
-		// Sets up the uniforms and attributes that are common between block programs.
-		function setupCommon(program, gl) {
-			program.model = gl.getUniformLocation(program, "model");
-			program.view = gl.getUniformLocation(program, "view");
-			program.pos = gl.getAttribLocation(program, "pos");
-			program.norm = gl.getAttribLocation(program, "norm");
-		}
 		
 		// A promise for a colored block program.
-		this.color = request([Shader.Block.vertex, Shader.Block.color], function(program, gl) {
-			program.color = gl.getUniformLocation(program, "color");
-			setupCommon(program, gl);
-		});
+		this.color = request([Shader.Block.vertex, Shader.Block.color]);
 		
 		// A promise for a textured block program.
-		this.texture = request([Shader.Block.vertex, Shader.Block.texture], function(program, gl) {
-			program.scale = gl.getUniformLocation(program, "scale");
-			program.offset = gl.getUniformLocation(program, "offset");
-			program.texture = gl.getUniformLocation(program, "texture");
-			setupCommon(program, gl);
-		});
+		this.texture = request([Shader.Block.vertex, Shader.Block.texture]);
 	}
 	
 	// Contains programs for lines.
 	this.Line = new function() {
-		
-		// Sets up the uniforms and attributes that are common between line programs.
-		function setupCommon(program, gl) {
-			program.model = gl.getUniformLocation(program, "model");
-			program.scale = gl.getUniformLocation(program, "scale");
-			program.view = gl.getUniformLocation(program, "view");
-			program.eyePos = gl.getUniformLocation(program, "eyePos");
-			program.pos = gl.getAttribLocation(program, "pos");
-			program.dir = gl.getAttribLocation(program, "dir");
-			program.offset = gl.getAttribLocation(program, "offset");
-		}
-		
+
 		// A promise for a colored line program.
-		this.color = request([Shader.Line.vertex, Shader.color], function(program, gl) {
-			program.color = gl.getUniformLocation(program, "color");
-			setupCommon(program, gl);
-		});
+		this.color = request([Shader.Line.vertex, Shader.color]);
 		
 		// A promise for a colored line program with falloff.
-		this.colorFalloff = request([Shader.Line.vertex, Shader.Line.colorFalloff], function(program, gl) {
-			program.color = gl.getUniformLocation(program, "color");
-			setupCommon(program, gl);
-		});
+		this.colorFalloff = request([Shader.Line.vertex, Shader.Line.colorFalloff]);
 	}
 	
 	// Define exports.
@@ -244,55 +232,28 @@ function Mesh(mode, vertexData, indexData, vertexSize, attributes) {
 	var Mode = {
 		Triangles : WebGLRenderingContext.TRIANGLES
 	}
-	
-	// Enables, and sets up, the attributes for a program.
-	function enableAttributes(gl, program, attributes, vertexSize) {
-		for (name in attributes) {
-			var attribute = attributes[name];
-			var location = program[name];
-			gl.enableVertexAttribArray(location);
-			gl.vertexAttribPointer(location, attribute.size, 
-				gl.FLOAT, false, vertexSize * 4, attribute.offset * 4);
-		}
-	}
-	
-	// Disables the attributes for a program.
-	function disableAttributes(gl, program, attributes) {
-		for (name in attributes) {
-			gl.disableVertexAttribArray(program[name]);
-		}
-	}
 
 	// Implement 'Resource'.
 	this.prototype = Object.create(Resource.prototype);
 	this.prototype.create = function(gl) {
-		var mode = this.mode;
-		var attributes = this.attributes;
-		var vertexSize = this.vertexSize;
+		var res = { };
+		res.mode = this.mode;
+		res.attributes = this.attributes;
+		res.vertexSize = this.vertexSize;
 		var vertexBuffer = gl.createBuffer();
 		gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
 		gl.bufferData(gl.ARRAY_BUFFER, this.vertexData, gl.STATIC_DRAW);
+		res.vertexBuffer = vertexBuffer;
 		if (this.indexData) {
 			var indexBuffer = gl.createBuffer();
 			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
 			gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, this.indexData, gl.STATIC_DRAW);
-			var count = this.indexData.length;
-			return function(program) {
-				gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
-				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
-				enableAttributes(gl, program, attributes, vertexSize);
-				gl.drawElements(mode, count, gl.UNSIGNED_SHORT, 0);
-				disableAttributes(gl, program, attributes);
-			};
+			res.indexBuffer = indexBuffer;
+			res.count = this.indexData.length;
 		} else {
-			var count = this.vertexData.length / this.vertexSize;
-			return function(program) {
-				gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
-				enableAttributes(gl, program, attributes, vertexSize);
-				gl.drawArrays(mode, 0, count);
-				disableAttributes(gl, program, attributes);
-			};
+			res.count = this.vertexData.length / this.vertexSize;
 		}
+		return res;
 	}
 	
 	// Creates a new 'Mesh' object.
@@ -488,9 +449,92 @@ function Mesh(mode, vertexData, indexData, vertexSize, attributes) {
 	
 	// Define exports.
 	this.Mode = Mode;
-	this.enableAttributes = enableAttributes;
-	this.disableAttributes = disableAttributes;
 	this.create = create;
 	this.createExpanded = createExpanded;
 	this.createBuilder = createBuilder;
 }).call(Mesh);
+
+// Sets a constant value for a variable. Variables may be uniforms or attributes,
+// and values may be numbers or arrays of numbers.
+WebGLRenderingContext.prototype.setConstant = function(variable, value) {
+	if (variable.isAttribute) {
+		switch (variable.type) {
+			case this.FLOAT: this.vertexAttrib1f(variable.location, value); break;
+			case this.FLOAT_VEC2: this.vertexAttrib2fv(variable.location, value); break;
+			case this.FLOAT_VEC3: this.vertexAttrib3fv(variable.location, value); break;
+			case this.FLOAT_VEC4: this.vertexAttrib4fv(variable.location, value); break;
+		}
+	} else {
+		switch (variable.type) {
+			case this.BOOL: case this.INT: case this.SAMPLER_2D: case this.SAMPLER_CUBE: 
+				this.uniform1i(variable.location, value); break;
+			case this.BOOL_VEC2: case this.INT_VEC2:
+				this.uniform2iv(variable.location, value); break;
+			case this.BOOL_VEC3: case this.INT_VEC3:
+				this.uniform3iv(variable.location, value); break;
+			case this.BOOL_VEC4: case this.INT_VEC4:
+				this.uniform4iv(variable.location, value); break;
+			case this.FLOAT: this.uniform1f(variable.location, value); break;
+			case this.FLOAT_VEC2: this.uniform2fv(variable.location, value); break;
+			case this.FLOAT_VEC3: this.uniform3fv(variable.location, value); break;
+			case this.FLOAT_VEC4: this.uniform4fv(variable.location, value); break;
+			case this.FLOAT_MAT2: this.uniformMatrix2fv(variable.location, false, value); break;
+			case this.FLOAT_MAT3: this.uniformMatrix3fv(variable.location, false, value); break;
+			case this.FLOAT_MAT4: this.uniformMatrix4fv(variable.location, false, value); break;
+		}
+	}
+}
+
+// Sets constant values for a set of variables. Variables may be uniforms or attributes,
+// and values may be numbers or arrays of numbers.
+WebGLRenderingContext.prototype.setConstants = function(variables, values) {
+	for (var name in values) {
+		this.setConstant(variables[name], values[name]);
+	}
+}
+
+// Enables and sets up the appropriate attribute pointers for a set of variables.
+WebGLRenderingContext.prototype.enableAttributes = function(variables, vertexSize, attributes) {
+	for (name in attributes) {
+		var location = variables[name].location;
+		var attribute = attributes[name];
+		this.enableVertexAttribArray(location);
+		this.vertexAttribPointer(location, attribute.size, 
+			this.FLOAT, false, vertexSize * 4, attribute.offset * 4);
+	}
+}
+
+// Disables the attribute pointers for a set of variables.
+WebGLRenderingContext.prototype.disableAttributes = function(variables) {
+	for (name in variables) {
+		var variable = variables[name];
+		if (variable.isAttribute) {
+			this.disableVertexAttribArray(variable.location);
+		}
+	}
+}
+
+// Binds the appropriate buffers for a mesh.
+WebGLRenderingContext.prototype.bindMesh = function(mesh) {
+	this.bindBuffer(this.ARRAY_BUFFER, mesh.vertexBuffer);
+	if (mesh.indexBuffer) this.bindBuffer(this.ELEMENT_ARRAY_BUFFER, mesh.indexBuffer);
+}
+
+// Draws a mesh by making the appropriate call to 'drawArrays' or 'drawElements'.
+WebGLRenderingContext.prototype.drawMesh = function(mesh) {
+	if (mesh.indexBuffer) {
+		this.drawElements(mesh.mode, mesh.count, this.UNSIGNED_SHORT, 0);
+	} else {
+		this.drawArrays(mesh.mode, 0, mesh.count);
+	}
+}
+
+// Performs a full render of a given mesh using a given program.
+WebGLRenderingContext.prototype.render = function(program, mesh, constants) {
+	this.useProgram(program);
+	this.setConstants(program.variables, constants);
+	this.bindMesh(mesh);
+	this.enableAttributes(program.variables, mesh.vertexSize, mesh.attributes);
+	this.drawMesh(mesh);
+	this.disableAttributes(program.variables);
+}

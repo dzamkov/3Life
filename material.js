@@ -10,16 +10,21 @@ function Material(isTransparent) {
 	var resources = new Array();
 
 	// The 'Program' resource used to implement this material.
-	this.prototype.program = function() { return null; }
-
-	// Sets up the uniforms for a program implementing this material.
-	this.prototype.setupUniforms = function(gl, program) { }
+	this.prototype.program = null;
+	
+	// The constant values assigned to variables for the program
+	// for this material.
+	this.prototype.constants = { };
+	
+	// Sets up the textures used by this material.
+	this.prototype.setupTextures = function(gl) { }
 
 	// Represents a solid-colored material, which will be
 	// transparent if the optional alpha parameter is specified.
 	function Color(color) {
 		Material.call(this, color[3] < 1.0);
 		this.color = color;
+		this.constants = { color : color };
 	}
 	
 	// Define 'Color' methods and values.
@@ -28,9 +33,6 @@ function Material(isTransparent) {
 		delay(Program.Block.color, (function(program) {
 			this.prototype.program = program;
 		}).bind(this), resources);
-		this.prototype.setupUniforms = function(gl, program) {
-			gl.uniform4fv(program.color, this.color);
-		}
 		this.create = function(color) {
 			return new Color(color);
 		}
@@ -42,6 +44,11 @@ function Material(isTransparent) {
 		this.source = source;
 		this.scale = scale;
 		this.offset = offset;
+		this.constants = {
+			texture : 0,
+			scale : scale,
+			offset : offset 
+		};
 	}
 	
 	// Define 'Texture' methods and values.
@@ -50,12 +57,9 @@ function Material(isTransparent) {
 		delay(Program.Block.texture, (function(program) {
 			this.prototype.program = program;
 		}).bind(this), resources);
-		this.prototype.setupUniforms = function(gl, program) {
+		this.prototype.setupTextures = function(gl) {
 			gl.activeTexture(gl.TEXTURE0);
 			gl.bindTexture(gl.TEXTURE_2D, this.source.get(gl));
-			gl.uniform1i(program.texture, 0);
-			gl.uniform1f(program.scale, this.scale);
-			gl.uniform3fv(program.offset, this.offset);
 		}
 		this.create = function(source, scale, offset, isTransparent) {
 			return new Texture(source, scale, offset, isTransparent);

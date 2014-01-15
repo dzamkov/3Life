@@ -31,7 +31,7 @@ function init() {
 		requestAnimationFrame(animate);
 	})();
 	
-	join(Editor.dependencies, ignore).done(function() {
+	Editor.resources.await(function() {
 		var automataNode = Gol.nextInPlace(Gol.test, 0, Gol.test.depth, 10);
 		var matterNode = Gol.getMatter(automataNode);
 		var editor = Editor.create(canvas, matterNode);

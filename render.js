@@ -382,31 +382,26 @@ var Render = new function() {
 		// Renders the contents of this Scene.
 		this.prototype.render = function(gl, view, scale) {
 			this.buffers.forEach(function(mat, buffer) {
-				var procedure = mat.procedure;
-				if (procedure.hasValue) {
-					procedure = procedure.value;
-					var program = procedure.program.get(gl);
-					if (mat.isTransparent) {
-						gl.enable(gl.BLEND);
-						gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-					}
-					gl.useProgram(program);
-					var model = mat4.create();
-					mat4.identity(model);
-					gl.uniformMatrix4fv(program.model, false, model);
-					gl.uniformMatrix4fv(program.view, false, view);
-					if (program.scale) gl.uniform1f(program.scale, scale);
-					procedure.setUniforms(program, gl);
-					buffer.bind(gl);
-					gl.enableVertexAttribArray(program.pos);
-					gl.enableVertexAttribArray(program.norm);
-					gl.vertexAttribPointer(program.pos, 3, gl.FLOAT, false, 6 * 4, 0);
-					gl.vertexAttribPointer(program.norm, 3, gl.FLOAT, false, 6 * 4, 3 * 4);
-					buffer.draw(gl, gl.TRIANGLES, 6);
-					gl.disableVertexAttribArray(program.pos);
-					gl.disableVertexAttribArray(program.norm);
-					gl.disable(gl.BLEND);
+				var program = mat.program.get(gl);
+				if (mat.isTransparent) {
+					gl.enable(gl.BLEND);
+					gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 				}
+				gl.useProgram(program);
+				var model = mat4.create();
+				mat4.identity(model);
+				gl.uniformMatrix4fv(program.model, false, model);
+				gl.uniformMatrix4fv(program.view, false, view);
+				mat.setupUniforms(gl, program);
+				buffer.bind(gl);
+				gl.enableVertexAttribArray(program.pos);
+				gl.enableVertexAttribArray(program.norm);
+				gl.vertexAttribPointer(program.pos, 3, gl.FLOAT, false, 6 * 4, 0);
+				gl.vertexAttribPointer(program.norm, 3, gl.FLOAT, false, 6 * 4, 3 * 4);
+				buffer.draw(gl, gl.TRIANGLES, 6);
+				gl.disableVertexAttribArray(program.pos);
+				gl.disableVertexAttribArray(program.norm);
+				gl.disable(gl.BLEND);
 			});
 		}
 	}).call(Scene);

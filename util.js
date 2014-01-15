@@ -1,87 +1,206 @@
-function Promise() {
-	this.onComplete = null;
-	this.hasValue = false;
+// Contains functions related to callbacks.
+var Callback = new function() {
+
+	// Creates a new empty callback.
+	function create() {
+		return new Array();
+	}
+	
+	// Extends a callback with a handler to be called when
+	// it is invoked. The optional 'undo' callback can be specified
+	// in order for this function to register an undo handler which
+	// will remove the handler binding when the callback is invoked.
+	// This function may be called with 'callback' as null, in which
+	// case nothing happens.
+	function register(callback, handler, undo) {
+		if (callback) {
+			callback.push(handler);
+			if (undo) {
+				undo.push(function() {
+					var index = callback.indexOf(handler);
+					if (index >= 0) {
+						callback.splice(index, 1);
+					}
+				});
+			}
+		}
+	}
+	
+	// Invokes a callback with the given arguments.
+	function invoke(callback) {
+		var args = Array.prototype.slice.call(arguments, 1);
+		for (var i = 0; i < callback.length; i++) {
+			var res = callback[i].apply(Global, args);
+			if (res) return res;
+		}
+	}
+	
+	// Common callbacks.
+	this.render = create();
+	this.input = create();
+	this.update = create();
+	
+	// Define exports.
+	this.create = create;
+	this.register = register;
+	this.invoke = invoke;
+}
+
+// Contains functions related to DOM events.
+var Event = new function() {
+	
+	// Registers a listener for a DOM event, similar to 'Callback.register'.
+	this.register = function(element, name, listener, undo) {
+		element.addEventListener(name, listener);
+		Callback.register(undo, function() {
+			element.removeEventListener(name, listener);
+		});
+	}
+}
+
+// Identifies a value that is not currently available. The 'begin' parameter
+// is a function to be called to start the loading of the value for the promise.
+// It takes, as a parameter, the 'fufill' function for the promise. Alternatively,
+// the 'begin' parameter can be set to null, in which case the promise can only
+// be fufilled explicitly, by calling the 'fufill' method.
+function Promise(begin) {
+	this.begin = begin;
+	this.fufilled = Callback.create();
 	this.value = null;
 }
 
-Promise.prototype.fufill = function(value) {
-	this.value = value;
-	this.hasValue = true;
-	if (this.onComplete !== null) {
-		this.onComplete.call(null, value)
-		this.onComplete = null;
-	}
-}
+// Define 'Promise' functions.
+(function() {
 
-Promise.prototype.done = function(onComplete) {
-	if (this.hasValue) {
-		onComplete.call(null, this.value);
-	} else {
-		if (this.onComplete === null) {
-			this.onComplete = onComplete;
+	// Creates a new promise.
+	function create(begin) {
+		return new Promise(begin);
+	}
+
+	// Fufills this promise by assigning it a concrete value. This
+	// may only be called once in the lifetime of the 'Promise'.
+	this.prototype.fufill = function(value) {
+		this.begin = null;
+		this.value = value;
+		Callback.invoke(this.fufilled, value);
+		this.fufilled = null;
+	}
+	
+	// Registers a handler to be called when this promise is fufilled,
+	// or immediately if the promise has already been fufilled.
+	this.prototype.await = function(handler, undo) {
+		if (this.fufilled) {
+			if (this.begin) {
+				var begin = this.begin;
+				this.begin(this.fufill.bind(this), undo);
+				this.begin = null;
+				Callback.register(undo, function() {
+					this.begin = begin;
+				});
+			}
+			Callback.register(this.fufilled, handler, undo);
 		} else {
-			var current = this.onComplete;
-			var next = onComplete;
-			this.onComplete = function(value) {
-				current(value);
-				next(value);
-			}
+			handler(this.value);
 		}
 	}
-}
-
-Promise.prototype.map = function(map) {
-	var promise = new Promise();
-	this.done(function (value) { 
-		promise.fufill(map(value)); 
-	});
-	return promise;
-}
-
-function join(sources, create) {
-	var promise = new Promise();
-	var count = 0;
-	var onOneComplete = function() {
-		count++;
-		if (count >= sources.length) {
-			var results = new Array(sources.length);
-			for (var i = 0; i < sources.length; i++) {
-				results[i] = sources[i].value;
+	
+	// Creates and returns a promise corresponding to this promise with
+	// the given mapping applied.
+	this.prototype.map = function(map) {
+		var current = this;
+		return create(function(fufill, undo) {
+			current.await(function(value) {
+				fufill(map(value));
+			}, false, undo);
+		});
+	}
+	
+	// Like 'map', but calls the mapping function with 'arguments'
+	// set to value of this promise.
+	this.prototype.mapArgs = function(map) {
+		return this.map(function(value) {
+			return map.apply(this, value);
+		});
+	}
+	
+	// Creates and returns a promise which awaits all promises in a 
+	// collection (either an 'Array', or a key/value mapping), and returns
+	// a similarly-structured collection with all promises replaced by
+	// their corresponding values.
+	function join(sources) {
+		return create(function(fufill, undo) {
+			if (sources instanceof Array) {
+				var result = new Array(sources.length);
+				var have = 0;
+				for (var i = 0; i < sources.length; i++) {
+					sources[i].await((function(value) {
+						result[this] = value;
+						if (++have >= sources.length) fufill(result);
+					}).bind(i), undo);
+				}
+			} else {
+				var result = new Object();
+				var need = 1;
+				var have = 0;
+				for (name in sources) {
+					if (sources[name] instanceof Promise) {
+						need++;
+						sources[name].await((function(value) {
+							result[this] = value;
+							if (++have >= need) fufill(result);
+						}).bind(name), undo);
+					} else {
+						result[name] = sources[name];
+					}
+				}
+				if (have >= --need) fufill(result);
 			}
-			promise.fufill(create.call(null, results));
-		}
+		});
 	}
-	for (var i = 0; i < sources.length; i++) {
-		sources[i].done(onOneComplete);
+	
+	// Requests the text contents of a URL and returns
+	// the result as a promise.
+	function requestText(url) {
+		return create(function(fufill) {
+			var request = new XMLHttpRequest();
+			request.open('GET', url, true);
+			request.onload = function() { 
+				fufill(request.responseText);
+			}
+			request.send();
+		});
 	}
-	return promise;
-}
+	
+	// Requests the image contents of a URL and returns
+	// the result as a promise.
+	function requestImage(url) {
+		return create(function(fufill) {
+			var image = new Image();
+			image.src = url;
+			image.onload = function() {
+				fufill(image);
+			}
+		});
+	}
+	
+	// Define exports.
+	this.create = create;
+	this.join = join;
+	this.requestText = requestText;
+	this.requestImage = requestImage;
+}).call(Promise);
 
-function joinArgs(sources, create) {
-	return join(sources, function(args) {
-		return create.apply(this, args);
-	});
-}
-
-function requestText(url) {
-	var promise = new Promise();
-	var request = new XMLHttpRequest();
-	request.open('GET', url, true);
-	request.onload = function() { 
-		promise.fufill(request.responseText);
+// Defines a delay-loaded section of code. This will wait for a promise
+// to be fufilled (without forcing it to begin loading) and call a handler
+// upon completion. If the optional 'list' parameter is specified, the 
+// promise will be appended to the array.
+function delay(source, handler, list) {
+	if (source.fufilled) {
+		Callback.register(source.fufilled, handler);
+	} else {
+		handler(this.value);
 	}
-	request.send();
-	return promise;
-}
-
-function requestImage(url) {
-	var promise = new Promise();
-	var image = new Image();
-	image.src = url;
-	image.onload = function() {
-		promise.fufill(image);
-	}
-	return promise;
+	if (list) list.push(source);
 }
 
 // The global object. I know this is probably 'window' but I want to
@@ -102,31 +221,6 @@ function combine(actions) {
 // Correct modulo for negative numbers.
 Number.prototype.mod = function(n) {
 	return ((this % n) + n) % n;
-}
-
-// Replaces the first occurence of the given value in an array
-// with the specified value.
-Array.prototype.replace = function(from, to) {
-	var i = this.indexOf(from);
-	if (i >= 0) this[i] = to;
-}
-
-// Scales the values in this array by the given value.
-Array.prototype.scale = function(amount) {
-	var res = new Array(this.length);
-	for (var i = 0; i < this.length; i++) {
-		res[i] = this[i] * amount;
-	}
-	return res;
-}
-
-// Adds the values in this array with the values in the other array.
-Array.prototype.add = function(other) {
-	var res = new Array(this.length);
-	for (var i = 0; i < this.length; i++) {
-		res[i] = this[i] + other[i];
-	}
-	return res;
 }
 
 // Contains functions related to structural equality of objects. This
@@ -312,66 +406,6 @@ function HashMap(initialCapacity) {
 	}
 	
 }).call(HashMap);
-
-// Contains functions related to callbacks.
-var Callback = new function() {
-
-	// Creates a new empty callback.
-	function create() {
-		return new Array();
-	}
-	
-	// Extends a callback with a handler to be called when
-	// it is invoked. The optional 'undo' callback can be specified
-	// in order for this function to register an undo handler which
-	// will remove the handler binding when the callback is invoked.
-	// This function may be called with 'callback' as null, in which
-	// case nothing happens.
-	function register(callback, handler, undo) {
-		if (callback) {
-			callback.push(handler);
-			if (undo) {
-				undo.push(function() {
-					var index = callback.indexOf(handler);
-					if (index >= 0) {
-						callback.splice(index, 1);
-					}
-				});
-			}
-		}
-	}
-	
-	// Invokes a callback with the given arguments.
-	function invoke(callback) {
-		var args = Array.prototype.slice.call(arguments, 1);
-		for (var i = 0; i < callback.length; i++) {
-			var res = callback[i].apply(Global, args);
-			if (res) return res;
-		}
-	}
-	
-	// Common callbacks.
-	this.render = create();
-	this.input = create();
-	this.update = create();
-	
-	// Define exports.
-	this.create = create;
-	this.register = register;
-	this.invoke = invoke;
-}
-
-// Contains functions related to DOM events.
-var Event = new function() {
-	
-	// Registers a listener for a DOM event, similar to 'Callback.register'.
-	this.register = function(element, name, listener, undo) {
-		element.addEventListener(name, listener);
-		Callback.register(undo, function() {
-			element.removeEventListener(name, listener);
-		});
-	}
-}
 
 // Creates a WebGLRenderingContext for the given canvas element.
 function createGLContext(canvas) {

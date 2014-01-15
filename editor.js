@@ -2,6 +2,9 @@
 // scene editor user interface.
 var Editor = new function() {
 
+	// The resources necessary to use this module.
+	var resources = [Texture.metal, Material.resources];
+
 	// Describes a free-floating camera for an editor.
 	function Camera(pos, yaw, pitch, foward) {
 		this.pos = pos;
@@ -112,6 +115,15 @@ var Editor = new function() {
 		 0, 0, 1, 0,
 		 0, 0, 0, 1]];
 		 
+	// Load programs.
+	var lineProgram, blockProgram;
+	delay(Program.Line.color, function(program) {
+		lineProgram = program;
+	}, resources);
+	delay(Program.Block.color, function(program) {
+		blockProgram = program;
+	}, resources);
+		 
 	// Creates and returns a function to draw a selection box.
 	function prepareDrawBox(gl, box) {
 		var drawCube = Mesh.Line.cube.get(gl);
@@ -121,7 +133,7 @@ var Editor = new function() {
 		mat4.translate(model, model, bounds.min);
 		mat4.scale(model, model, Vec3.sub(bounds.max, bounds.min));
 		var scale = box.scale;
-		var program = Program.Line.color.value.get(gl);
+		var program = lineProgram.get(gl);
 		return function(view, eyePos) {
 			gl.useProgram(program);
 			gl.uniform4f(program.color, 0.4, 0.4, 0.4, 1.0);
@@ -160,7 +172,7 @@ var Editor = new function() {
 		mat4.multiply(secondary, secondary, permuteMatrices[axis]);
 		mat4.scale(secondary, secondary, [width, height, 1.0]);
 		
-		var program = Program.Line.color.value.get(gl);
+		var program = lineProgram.get(gl);
 		return function(view, eyePos) {
 			gl.useProgram(program);
 			gl.uniformMatrix4fv(program.view, false, view);
@@ -185,7 +197,7 @@ var Editor = new function() {
 		mat4.identity(model);
 		mat4.translate(model, model, bounds.min);
 		mat4.scale(model, model, Vec3.sub(bounds.max, bounds.min));
-		var program = Program.Block.color.value.get(gl);
+		var program = blockProgram.get(gl);
 		return function(view) {
 			gl.useProgram(program);
 			gl.uniform4f(program.color, 0.7, 0.7, 0.7, 0.5);
@@ -314,10 +326,8 @@ var Editor = new function() {
 		});
 	}
 	
-	// Declare dependencies.
-	this.dependencies = [Program.Line.color];
-	
 	// Define exports.
+	this.resources = Promise.join(resources);
 	this.Camera = Camera;
 	this.lineGridMesh = lineGridMesh;
 };

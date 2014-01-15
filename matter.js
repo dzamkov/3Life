@@ -21,14 +21,9 @@ var Matter = new function() {
 	// Represents a volume that is empty.
 	var empty = lookup(Substance.empty);
 	
-	// Gets a solid-colored matter node.
-	function color(r, g, b, a) {
-		return lookup(Substance.solidUniform(Material.color(r, g, b, a)));
-	}
-	
-	// Gets a textured matter node.
-	function texture(source, isTransparent) {
-		return lookup(Substance.solidUniform(Material.texture(source, isTransparent)));
+	// Gets a solid matter node for a material.
+	function solidUniform(material) {
+		return lookup(Substance.solidUniform(material));
 	}
 	
 	// Define exports.
@@ -38,6 +33,5 @@ var Matter = new function() {
 	this.lookup = lookup;
 	this.inside = inside;
 	this.empty = empty;
-	this.color = color;
-	this.texture = texture;
+	this.solidUniform = solidUniform;
 }

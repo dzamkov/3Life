@@ -231,4 +231,7 @@ Gol.getMatter = function(node) {
 	});
 }
 Gol.getMatter.dead = Matter.empty;
-Gol.getMatter.live = Matter.texture(Texture.request("textures/metal.png"));
+delay(Texture.metal, function(texture) {
+	Gol.getMatter.live = Matter.solidUniform(Material.texture(
+		texture, 1.0 / (1 << 7), Vec3.zero, false));
+});

@@ -458,15 +458,19 @@ function Space(dimension) {
 			this.prototype.replace = function(from, to) {
 				if (this === from) return to;
 				if (this.depth == 0) return this;
-				function replaceChild(source) { return source.replace(from, to); };
-				return get(this.children.map(replaceChild));
+				var children = new Array(size);
+				for (var i = 0; i < children.length; i++)
+					children[i] = this.children[i].replace(from, to);
+				return get(children);
 			}
 			
 			// Maps all leaf nodes of this node using the given function.
 			this.prototype.map = function(map) {
 				if (this.depth == 0) return map(this);
-				function mapChild(source) { return source.map(map); };
-				return get(this.children.map(mapChild));
+				var children = new Array(size);
+				for (var i = 0; i < children.length; i++)
+					children[i] = this.children[i].map(map);
+				return get(children);
 			}
 			
 			// Replaces all sub-nodes within the given bound (in unit coordinates) with

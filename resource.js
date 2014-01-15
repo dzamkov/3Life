@@ -65,7 +65,7 @@ function Shader(source, type) {
 	// Requests a shader from a url, returning a promise to be
 	// fufilled once it has been downloaded.
 	function request(url, type) {
-		return requestText(url).map(function(source) {
+		return Promise.requestText(url).map(function(source) {
 			return new Shader(source, type);
 		});
 	}
@@ -129,7 +129,7 @@ function Program(shaders, setup) {
 	// Creates a promise for a program given a set of promises for
 	// its constituent shaders and a static setup function.
 	function request(shaders, setup) {
-		return join(shaders, function(shaders) {
+		return Promise.join(shaders).map(function(shaders) {
 			return new Program(shaders, setup);
 		});
 	}
@@ -156,6 +156,7 @@ function Program(shaders, setup) {
 		// A promise for a textured block program.
 		this.texture = request([Shader.Block.vertex, Shader.Block.texture], function(program, gl) {
 			program.scale = gl.getUniformLocation(program, "scale");
+			program.offset = gl.getUniformLocation(program, "offset");
 			program.texture = gl.getUniformLocation(program, "texture");
 			setupCommon(program, gl);
 		});
@@ -216,13 +217,13 @@ function Texture(image) {
 	// Requests a texture from a url, returning a promise to
 	// be fufilled once it has been downloaded.
 	this.request = function(url) {
-		return requestImage(url).map(function(image) {
+		return Promise.requestImage(url).map(function(image) {
 			return new Texture(image);
 		});
 	}
 	
-	// Generic cell texture.
-	this.cell = this.request("textures/cell.png");
+	// Metal texture.
+	this.metal = this.request("textures/metal.png");
 
 }).call(Texture);
 

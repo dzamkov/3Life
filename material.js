@@ -1,83 +1,77 @@
-// Describes the visual properties of a surface. The 'procedure'
-// parameter is a promise for the procedure that renders the material.
-function Material(procedure, isTransparent) {
-	this.procedure = procedure;
+// Describes the visual properties of a surface.
+function Material(isTransparent) {
 	this.isTransparent = isTransparent;
 }
 
 // Define 'Material' functions and sub-types.
 (function() {
 
-	// The base type for materials.
-	var Base = this;
-	
-	// Describes a procedure for rendering a material.
-	function Procedure(program, setUniforms) {
-		this.program = program;
-		this.setUniforms = setUniforms;
-	}
+	// The resources necessary to use this module.
+	var resources = new Array();
 
-	// Define 'Procedure' functions.
-	(function() {
+	// The 'Program' resource used to implement this material.
+	this.prototype.program = function() { return null; }
 
-		// Creates a promise for a procedure to render a colored material.
-		this.color = function(mat) {
-			return Program.Block.color.map(function(program) {
-				return new Procedure(program, function(program, gl) {
-					gl.uniform4f(program.color, mat.r, mat.g, mat.b, mat.a);
-				});
-			});
-		}
-		
-		// Creates a promise for a procedure to render a textured material,
-		// given a promise for the texture itself.
-		this.texture = function(texture) {
-			return joinArgs([Program.Block.texture, texture], function(program, texture) {
-				return new Procedure(program, function(program, gl) {
-					gl.activeTexture(gl.TEXTURE0);
-					gl.bindTexture(gl.TEXTURE_2D, texture.get(gl));
-					gl.uniform1i(program.texture, 0);
-				});
-			});
-		}
-		
-	}).call(Procedure);
-	
+	// Sets up the uniforms for a program implementing this material.
+	this.prototype.setupUniforms = function(gl, program) { }
+
 	// Represents a solid-colored material, which will be
 	// transparent if the optional alpha parameter is specified.
-	function Color(r, g, b, a) {
-		this.r = r; this.g = g; this.b = b; this.a = a || 1.0;
-		Base.call(this, Procedure.color(this), a ? true : false);
+	function Color(color) {
+		Material.call(this, color[3] < 1.0);
+		this.color = color;
 	}
 	
-	// Creates a solid-colored material.
-	function color(r, g, b, a) {
-		return new Color(r, g, b, a);
-	}
+	// Define 'Color' methods and values.
+	(function() {
+		this.prototype = Object.create(Material.prototype);
+		delay(Program.Block.color, (function(program) {
+			this.prototype.program = program;
+		}).bind(this), resources);
+		this.prototype.setupUniforms = function(gl, program) {
+			gl.uniform4fv(program.color, this.color);
+		}
+		this.create = function(color) {
+			return new Color(color);
+		}
+	}).call(Color);
 	
 	// Represents a textured material.
-	function Texture(source, isTransparent) {
-		Base.call(this, Procedure.texture(source), isTransparent);
+	function Texture(source, scale, offset, isTransparent) {
+		Material.call(this, isTransparent);
+		this.source = source;
+		this.scale = scale;
+		this.offset = offset;
 	}
 	
-	// creates a textured material given a promise to the source texture.
-	function texture(source, isTransparent) {
-		return new Texture(source, isTransparent);
-	}
-	
-	// TODO: Border material.
+	// Define 'Texture' methods and values.
+	(function() {
+		this.prototype = Object.create(Material.prototype);
+		delay(Program.Block.texture, (function(program) {
+			this.prototype.program = program;
+		}).bind(this), resources);
+		this.prototype.setupUniforms = function(gl, program) {
+			gl.activeTexture(gl.TEXTURE0);
+			gl.bindTexture(gl.TEXTURE_2D, this.source.get(gl));
+			gl.uniform1i(program.texture, 0);
+			gl.uniform1f(program.scale, this.scale);
+			gl.uniform3fv(program.offset, this.offset);
+		}
+		this.create = function(source, scale, offset, isTransparent) {
+			return new Texture(source, scale, offset, isTransparent);
+		}
+	}).call(Texture);
 	
 	// A material that is completely transparent.
-	var empty = new Base(null, true);
+	var empty = new Material(true);
 	
 	// Define exports.
-	this.Procedure = Procedure;
+	this.resources = Promise.join(resources);
 	this.Color = Color;
-	this.color = color;
+	this.color = Color.create;
 	this.Texture = Texture;
-	this.texture = texture;
+	this.texture = Texture.create;
 	this.empty = empty;
-
 }).call(Material);
 
 // Describes the visual properties of a solid cube of matter.
@@ -88,9 +82,6 @@ function Substance(isTransparent) {
 // Define 'Substance' functions and sub-types.
 (function() {
 	
-	// The base type for materials.
-	var Base = this;
-
 	// Represents a substance that appears as a solid cube with
 	// faces described by the given materials.
 	function Solid(faces) {
@@ -101,39 +92,36 @@ function Substance(isTransparent) {
 				isTransparent = isTransparent || faces[i][j].isTransparent;
 			}
 		}
-		Base.call(this, isTransparent);
-	}
-
-	// Gets the material for the given face of a solid substance.
-	Solid.prototype.getFaceMaterial = function(axis, flip) {
-		return this.faces[axis][flip ? 1 : 0];
+		Substance.call(this, isTransparent);
 	}
 	
-	// Creates a solid substance.
-	function solid(faces) {
-		return new Solid(faces);
-	}
-	
-	// Creates a solid substance with a single material for all of its faces.
-	function solidUniform(material) {
-		var axis = [material, material];
-		return new Solid([axis, axis, axis]);
-	}
-	
-	// Creates a solid substance with different materials for its top face, its
-	// side faces, and its bottom face.
-	function solidUpright(top, side, bottom) {
-		var sideAxis = [side, side];
-		return new Solid([sideAxis, sideAxis, [top, bottom]]);
-	}
+	// Define 'Solid' methods.
+	(function() {
+		this.prototype = Object.create(Substance.prototype);
+		
+		// Gets the material for the given face of this solid substance.
+		this.prototype.getFaceMaterial = function(axis, flip) {
+			return this.faces[axis][flip ? 1 : 0];
+		}
+		
+		// Creates a solid substance.
+		this.create = function(faces) {
+			return new Solid(faces);
+		}
+		
+		// Creates a solid substance with a single material for all of its faces.
+		this.createUniform = function(material) {
+			var axis = [material, material];
+			return new Solid([axis, axis, axis]);
+		}
+	}).call(Solid);
 
 	// A substance that is completely transparent.
-	var empty = new Base(true);
+	var empty = new Substance(true);
 	
 	// Define exports.
 	this.Solid = Solid;
-	this.solid = solid;
-	this.solidUniform = solidUniform;
-	this.solidUpright = solidUpright;
+	this.solid = Solid.create;
+	this.solidUniform = Solid.createUniform;
 	this.empty = empty;
 }).call(Substance);

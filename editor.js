@@ -312,9 +312,9 @@ function Editor(canvas, node, undo) {
 			}
 			this.prototype.update = function(editor, ray) {
 				var plane = editor.plane;
-				var res = Volume.intersectPlane(plane.axis, plane.pos, ray.pos, ray.dir);
+				var res = Volume.tracePlane(plane.axis, plane.pos, ray.pos, ray.dir);
 				if (res) {
-					var block = editor.plane.getBlock(res);
+					var block = editor.plane.getBlock(res.param);
 					if (block) {
 						this.updateBlock(editor.plane.box.scale, block);
 					}
@@ -430,8 +430,28 @@ function Editor(canvas, node, undo) {
 			}
 		}).call(Paint);
 		
+		// A control for adjusting the size and volume of a selection box.
+		function Box(boxIndex, cornerIndex) {
+			this.boxIndex = boxIndex;
+			this.cornerIndex = cornerIndex;
+		}
+		
+		// Define 'Box' methods.
+		(function() {
+			this.prototype = Object.create(Control.prototype);
+			this.prototype.renderIndicator = function(editor, gl, viewProj) {
+				var box = editor.boxes[this.boxIndex];
+				var pos = box.bounds.getCorner(this.cornerIndex);
+				var rad = box.scale * 0.5;
+				var dif = [rad, rad, rad];
+				var bound = new Volume.Bound(Vec3.sub(pos, dif), Vec3.add(pos, dif));
+				renderBlock(gl, bound, viewProj);
+			}
+		}).call(Box);
+		
 		// Define exports.
 		this.Paint = Paint;
+		this.Box = Box;
 	}).call(Control);
 	
 	// Sets the node for this editor.
@@ -475,14 +495,29 @@ function Editor(canvas, node, undo) {
 	// Returns null if there is no selectable object at the coordinates.
 	this.prototype.select = function(x, y) {
 		var ray = this.projectPoint(x, y);
-		var res = Volume.intersectPlane(this.plane.axis, this.plane.pos, ray.pos, ray.dir);
-		if (res) {
-			var pBlock = this.plane.getBlock(res);
-			if (pBlock) {
-				return new Control.Paint(pBlock);
+		var best = null;
+		var bestDis = Infinity;
+		for (var i = 0; i < this.boxes.length; i++) {
+			var box = this.boxes[i];
+			for (var j = 0; j < 8; j++) {
+				var corner = box.bounds.getCorner(j);
+				var radius = box.scale * 0.5;
+				var res = Volume.traceSphere(corner, radius, ray.pos, ray.dir);
+				if (res && res.dis < bestDis) {
+					best = new Control.Box(i, j);
+					bestDis = res.dis;
+				}
 			}
 		}
-		return null;
+		var res = Volume.tracePlane(this.plane.axis, this.plane.pos, ray.pos, ray.dir);
+		if (res && res.dis < bestDis) {
+			var pBlock = this.plane.getBlock(res.param);
+			if (pBlock) {
+				best = new Control.Paint(pBlock);
+				bestDis = res.dis;
+			}
+		}
+		return best;
 	}
 	
 	// Renders the editor view.
@@ -526,7 +561,7 @@ function Editor(canvas, node, undo) {
 			var near = Volume.nearTransformed(pred, this.node, 1.0, [0.0, 0.0, 0.0], this.camera.pos, this.maxDis);
 			this.lastDis = near ? near.dis : this.maxDis;
 			if (near && near.dis < this.minDis) {
-				this.camera.pos = Vec3.add(this.camera.pos, Vec3.scale(near.norm, minDis - near.dis));
+				this.camera.pos = Vec3.add(this.camera.pos, Vec3.scale(near.norm, this.minDis - near.dis));
 			} else break;
 		}
 	}

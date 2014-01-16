@@ -14,15 +14,6 @@ function Space(dimension) {
 			zero[i] = 0.0;
 		}
 		
-		// Create named unit vectors.
-		for (var i = 0; i < dimension; i++) {
-			var vec = new Array(dimension);
-			for (var j = 0; j < dimension; j++) {
-				vec[j] = (i == j) ? 1.0 : 0.0;
-			}
-			this[axis[i]] = vec;
-		}
-		
 		// Creates a vector from its components.
 		function create(components) {
 			var res = new Array(dimension);
@@ -50,6 +41,23 @@ function Space(dimension) {
 			return res;
 		}
 		
+		// Create named unit vectors.
+		var unit = new Array(dimension * 2);
+		for (var i = 0; i < dimension; i++) {
+			var vec = new Array(dimension);
+			for (var j = 0; j < dimension; j++) {
+				vec[j] = (i == j) ? 1.0 : 0.0;
+			}
+			this[axis[i]] = vec;
+			unit[i] = vec;
+			unit[i + dimension] = sub(zero, vec);
+		}
+		
+		// Gets a specific unit vector for this dimension.
+		function getUnit(axis, flip) {
+			return unit[flip ? (axis + dimension) : axis];
+		}
+		
 		// Scales a vector by a given amount.
 		function scale(vec, amt) {
 			var res = new Array(dimension);
@@ -68,13 +76,18 @@ function Space(dimension) {
 			return res;
 		}
 		
+		// Computes the dot product between two vectors.
+		function dot(a, b) {
+			var res = 0;
+			for (var i = 0; i < dimension; i++) {
+				res += a[i] * b[i];
+			}
+			return res;
+		}
+		
 		// Computes the length of a vector.
 		function len(vec) {
-			var sqrLen = 0;
-			for (var i = 0; i < dimension; i++) {
-				sqrLen += vec[i] * vec[i];
-			}
-			return Math.sqrt(sqrLen);
+			return Math.sqrt(dot(vec, vec));
 		}
 		
 		// Applies a scale, then a translation, to the given vector.
@@ -125,10 +138,12 @@ function Space(dimension) {
 		// Define exports.
 		this.zero = zero;
 		this.create = create;
+		this.getUnit = getUnit;
 		this.add = add;
 		this.sub = sub;
 		this.abs = abs;
 		this.scale = scale;
+		this.dot = dot;
 		this.len = len;
 		this.transform = transform;
 		this.normalize = normalize;
@@ -175,6 +190,31 @@ function Space(dimension) {
 		// Gets the size of this bound as a vector.
 		this.prototype.getSize = function() {
 			return Vector.sub(this.max, this.min);
+		}
+		
+		// Gets the location of a corner on this bound.
+		this.prototype.getCorner = function(index) {
+			var res = new Array(dimension);
+			for (var i = 0; i < res.length; i++) {
+				res[i] = ((index & (1 << i)) != 0) ?
+					this.max[i] : this.min[i];
+			}
+			return res;
+		}
+		
+		// Sets the location of a corner on this bound, returning
+		// the bound that results.
+		this.prototype.setCorner = function(index, vec) {
+			var min = new Array(dimension);
+			var max = new Array(dimension);
+			for (var i = 0; i < vec.length; i++) {
+				if ((index & (1 << i)) != 0) {
+					max[i] = vec[i];
+				} else {
+					min[i] = vec[i];
+				}
+			}
+			return new Bound(min, max);
 		}
 		
 		// Applies a scale, then a translation, to all points in
@@ -720,19 +760,36 @@ var Vec3 = Volume.Vector;
 		return res;
 	}
 	
-	// Determines the point of intersection between a ray and a plane. The parameter of 
-	// the intersection (the 2-vector that can be unprojected from the plane to get the 
-	// point of intersection) will be returned.
-	function intersectPlane(axis, val, pos, dir) {
+	// Returns information about the intersection between a ray and a plane, or null
+	// if there is no intersection.
+	function tracePlane(axis, val, pos, dir) {
 		var aDir = dir[axis];
-		if (aDir == 0) return null;
+		if (aDir == 0.0) return null;
 		var aDis = val - pos[axis];
+		if ((aDir > 0.0) != (aDis >= 0.0)) return null;
 		var pPos = Vec3.proj(pos, axis);
 		var pDir = Vec3.proj(dir, axis);
+		var pDis = aDis / aDir;
 		
 		// TODO: return null if ray is going in the wrong direction.
-		
-		return Vec2.add(pPos, Vec2.scale(pDir, aDis / aDir));
+		var param = Vec2.add(pPos, Vec2.scale(pDir, pDis));
+		var point = Vec3.unproj(param, axis, val);
+		var norm = Vec3.getUnit(axis, aDir > 0.0);
+		var dis = Math.sqrt(pDis * pDis + aDis * aDis);
+		return { dis : dis, point : point, norm : norm, param : param };
+	}
+	
+	// Returns information about the intersection between a ray and a sphere, or null
+	// if there is no intersection.
+	function traceSphere(center, radius, pos, dir) {
+		var dPos = Vec3.sub(pos, center);
+		var w = Vec3.dot(dir, dPos);
+		var det = w * w - Vec3.dot(dPos, dPos) + radius * radius;
+		if (det < 0.0) return null;
+		var dis = -w - Math.sqrt(det);
+		var point = Vec3.add(pos, Vec3.scale(dir, dis));
+		var norm = Vec3.normalize(Vec3.sub(point, center));
+		return { dis : dis, point : point, norm : norm };
 	}
 
 	// Define exports.
@@ -740,6 +797,6 @@ var Vec3 = Volume.Vector;
 	this.Permutation.sort = sort;
 	this.near = near;
 	this.nearTransformed = nearTransformed;
-	this.intersectPlane = intersectPlane;
-	
+	this.tracePlane = tracePlane;
+	this.traceSphere = traceSphere;
 }).call(Volume);

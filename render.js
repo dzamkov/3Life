@@ -380,7 +380,7 @@ var Render = new function() {
 		// reduce unnecessary overwrite.
 		
 		// Renders the contents of this Scene.
-		this.prototype.render = function(gl, view, scale) {
+		this.prototype.render = function(gl, view) {
 			this.buffers.forEach(function(mat, buffer) {
 				var program = mat.program.get(gl);
 				if (mat.isTransparent) {

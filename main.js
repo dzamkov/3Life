@@ -34,6 +34,6 @@ function init() {
 	Editor.resources.await(function() {
 		var automataNode = Gol.nextInPlace(Gol.test, 0, Gol.test.depth, 10);
 		var matterNode = Gol.getMatter(automataNode);
-		var editor = Editor.create(canvas, matterNode);
+		var editor = new Editor(canvas, matterNode);
 	});
 }

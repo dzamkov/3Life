@@ -171,7 +171,12 @@ function Space(dimension) {
 			}
 			return new Bound(min, max);
 		}
-	
+		
+		// Gets the size of this bound as a vector.
+		this.prototype.getSize = function() {
+			return Vector.sub(this.max, this.min);
+		}
+		
 		// Applies a scale, then a translation, to all points in
 		// this bound.
 		this.prototype.transform = function(scale, offset) {
@@ -207,6 +212,26 @@ function Space(dimension) {
 				if (this.max[i] == container.max[i]) return true;
 			}
 			return false;
+		}
+		
+		// Projects a bound to the next lower dimension along
+		// the given axis.
+		this.prototype.proj = function(axis) {
+			var bound = Space.get(dimension - 1).Bound;
+			return new bound(
+				Vector.proj(this.min, axis),
+				Vector.proj(this.max, axis));
+		}
+		
+		// Projects a bound to the next higher dimension by specifying
+		// a min and max values for an axis.
+		this.prototype.unproj = function(axis, min, max) {
+			var space = Space.get(dimension + 1);
+			var bound = space.Bound;
+			var vector = space.Vector;
+			return new bound(
+				vector.unproj(this.min, axis, min),
+				vector.unproj(this.max, axis, max));
 		}
 
 		// Determines whether two bound shares an entire edge/face.
@@ -704,6 +729,9 @@ var Vec3 = Volume.Vector;
 		var aDis = val - pos[axis];
 		var pPos = Vec3.proj(pos, axis);
 		var pDir = Vec3.proj(dir, axis);
+		
+		// TODO: return null if ray is going in the wrong direction.
+		
 		return Vec2.add(pPos, Vec2.scale(pDir, aDis / aDir));
 	}
 

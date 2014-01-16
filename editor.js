@@ -26,20 +26,34 @@ function Editor(canvas, node, undo) {
 	this.renderPlaneFor = null;
 	
 	var editor = this;
+	var point = [0, 0];
 	Event.register(canvas, 'mousemove', function(event) {
-		var x = event.clientX;
-		var y = event.clientY;
+		point = [event.clientX, event.clientY];
 		if (editor.dragHandler) {
-			editor.dragHandler.update(editor, editor.projectPoint(x, y));
+			editor.dragHandler.update(editor, point);
 		} else {
-			editor.control = editor.select(x, y);
+			editor.control = editor.select(point);
+		}
+	});
+	
+	var lastTime = new Date().getTime();
+	Event.register(canvas, 'mousewheel', function(event) {
+		var time = new Date().getTime();
+		if (time > lastTime + 200.0) {
+			lastTime = time;
+			var d = Math.round(event.wheelDelta / 40.0);
+			d = Math.min(1, Math.max(-1, d));
+			var f = window.keyStates[16] ? 0 : d;
+			var b = d;
+			editor.plane = editor.plane.scroll(f, b);
+			editor.control = null;
 		}
 	});
 	
 	Input.Trigger.mouseButton(0, true).register(canvas, function() {
 		if (!editor.dragHandler) {
 			if (editor.control) {
-				editor.dragHandler = editor.control.begin(editor);
+				editor.dragHandler = editor.control.begin(editor, point);
 			} else {
 				editor.dragHandler = Editor.DragHandler.none;
 			}
@@ -119,6 +133,16 @@ function Editor(canvas, node, undo) {
 		this.scale = scale;
 	}
 	
+	// Define 'Box' methods.
+	(function() {
+	
+		// Sets the bound for this box.
+		this.prototype.setBound = function(bounds) {
+			return new Box(bounds, this.scale);
+		}
+	
+	}).call(Box);
+	
 	// Describes an edit plane for an editor. An edit plane is a "slice" of a
 	// a selection box that can be "painted" on. Edits made on the plane will
 	// extend a certain distance behind the plane, dictated by the plane's "depth".
@@ -149,7 +173,51 @@ function Editor(canvas, node, undo) {
 		this.prototype.unprojBlock = function(block) {
 			return block.unproj(this.axis, this.min, this.max);
 		}
+		
+		// Moves this plane along its axis by the given block amounts.
+		this.prototype.scroll = function(front, back) {
+			var bMin = this.box.bounds.min[this.axis];
+			var bMax = this.box.bounds.max[this.axis];
+			var scale = this.box.scale;
+			var flip = this.flip;
+			var min = this.min + (flip ? -back : front) * scale;
+			var max = this.max + (flip ? -front : back) * scale;
+			if (min >= max) {
+				if (flip) {
+					min = max - scale;
+				} else {
+					max = min + scale;
+				}
+			}
+			if (min < bMin) {
+				min = bMin;
+				max = Math.max(max, min + scale);
+			}
+			if (max > bMax) {
+				max = bMax;
+				min = Math.min(min, max - scale);
+			}
+			return new Plane(this.box, this.axis, min, max, flip);
+		}
 
+		// Sets the box for this plane, automatically adjusting min and
+		// max if they are out of range.
+		this.prototype.setBox = function(box) {
+			var bMin = box.bounds.min[this.axis];
+			var bMax = box.bounds.max[this.axis];
+			var min = this.min;
+			var max = this.max;
+			if (min < bMin) {
+				min = bMin;
+				max = Math.max(max, min + box.scale);
+			}
+			if (max > bMax) {
+				max = bMax;
+				min = Math.min(min, max - box.scale);
+			}
+			return new Plane(box, this.axis, min, max, this.flip);
+		}
+		
 	}).call(Plane);
 	
 	// Creates a mesh for a line grid. The mesh is on the XY plane, and each square
@@ -227,7 +295,7 @@ function Editor(canvas, node, undo) {
 		return function(view, eyePos) {
 			gl.render(program, gridMesh, {
 				color : [0.1, 0.6, 0.9, 1.0],
-				scale : scale * 0.07,
+				scale : scale * 0.06,
 				model : primary,
 				view : view, // TODO: Rename view uniforms to viewProj
 				eyePos : eyePos });
@@ -287,8 +355,8 @@ function Editor(canvas, node, undo) {
 		this.prototype.renderIndicator = function(editor, gl, viewProj) { }
 		
 		// Updates this drag handler in response to a mouse movement. The mouse
-		// state is given by a ray.
-		this.prototype.update = function(editor, ray) { }
+		// position is given as a 2d vector in pixel coordinates.
+		this.prototype.update = function(editor, point) { }
 		
 		// Notifies the drag handler that mouse drag has ended. This applies the 
 		// changes made by dragging.
@@ -310,8 +378,9 @@ function Editor(canvas, node, undo) {
 					renderBlock(gl, editor.plane.unprojBlock(this.blocks[i]), viewProj);
 				}
 			}
-			this.prototype.update = function(editor, ray) {
+			this.prototype.update = function(editor, point) {
 				var plane = editor.plane;
+				var ray = editor.unproj(point);
 				var res = Volume.tracePlane(plane.axis, plane.pos, ray.pos, ray.dir);
 				if (res) {
 					var block = editor.plane.getBlock(res.param);
@@ -395,10 +464,58 @@ function Editor(canvas, node, undo) {
 			this.lineBlocks = lineBlocks;
 			this.Line = Line;
 		}).call(Paint);
+		
+		// A drag handler for a moving a corner of a selection box.
+		function Box(startPoint, startPos, boxIndex, cornerIndex) {
+			this.startPoint = startPoint;
+			this.startPos = startPos;
+			this.boxIndex = boxIndex;
+			this.cornerIndex = cornerIndex;
+			this.axis = null;
+		}
+		
+		// Define 'Box' methods.
+		(function() {
+			this.prototype = Object.create(DragHandler.prototype);
+			this.prototype.renderIndicator = function(editor, gl, viewProj) { }
+			this.prototype.update = function(editor, point) {
+				var axis = this.axis;
+				if (axis === null) {
+					var compass = editor.projCompass(this.startPos);
+					var delta = Vec2.sub(point, this.startPoint);
+					var best = 0.0;
+					for (var i = 0; i < 3; i++) {
+						var len = Vec2.len(compass[i]);
+						var val = Math.abs(Vec2.dot(compass[i], delta)) / len;
+						if (val >= best) {
+							axis = i;
+							best = val;
+						}
+					}
+				}
+				var axisDir = Vec3.getUnit(axis, false);
+				var ray = editor.unproj(point);
+				var param = Volume.traceLine(this.startPos,
+					axisDir, ray.pos, ray.dir).aParam;
+				var box = editor.boxes[this.boxIndex];
+				var scale = box.scale;
+				param = Math.round(param / scale) * scale;
+				var nPoint = Vec3.add(this.startPos, Vec3.scale(axisDir, param));
+				if (nPoint[axis] != this.startPos[axis]) this.axis = axis;
+				var nBox = box.setBound(box.bounds.setCorner(this.cornerIndex, nPoint));
+				var plane = editor.plane;
+				if (plane && plane.box == box) {
+					editor.plane = plane.setBox(nBox);
+				}
+				editor.boxes[this.boxIndex] = nBox;
+			}
+			this.prototype.end = function(editor) { }
+		}).call(Box);
 	
 		// Define exports.
 		this.none = none;
 		this.Paint = Paint;
+		this.Box = Box;
 	}).call(DragHandler);
 	
 	// Identifies an object in the editor that can be selected, dragged or painted.
@@ -410,9 +527,9 @@ function Editor(canvas, node, undo) {
 		// Renders an indicator for when this control is selected.
 		this.prototype.renderIndicator = function(editor, gl, viewProj) { }
 		
-		// Begins a mouse drag starting at this control. This function
-		// should return a drag handler.
-		this.prototype.begin = function(editor) { return DragHandler.none; }
+		// Begins a mouse drag starting at this control.  The mouse
+		// position is given as a 2d vector in pixel coordinates.
+		this.prototype.begin = function(editor, point) { return DragHandler.none; }
 		
 		// A control for painting.
 		function Paint(block) {
@@ -425,7 +542,7 @@ function Editor(canvas, node, undo) {
 			this.prototype.renderIndicator = function(editor, gl, viewProj) {
 				renderBlock(gl, editor.plane.unprojBlock(this.block), viewProj);
 			}
-			this.prototype.begin = function(editor) {
+			this.prototype.begin = function(editor, point) {
 				return new DragHandler.Paint.Line(this.block);
 			}
 		}).call(Paint);
@@ -446,6 +563,10 @@ function Editor(canvas, node, undo) {
 				var dif = [rad, rad, rad];
 				var bound = new Volume.Bound(Vec3.sub(pos, dif), Vec3.add(pos, dif));
 				renderBlock(gl, bound, viewProj);
+			}
+			this.prototype.begin = function(editor, point) { 
+				var pos = editor.boxes[this.boxIndex].bounds.getCorner(this.cornerIndex);
+				return new DragHandler.Box(point, pos, this.boxIndex, this.cornerIndex);
 			}
 		}).call(Box);
 		
@@ -470,11 +591,40 @@ function Editor(canvas, node, undo) {
 		return viewProj;
 	}
 	
+	// Projects a world position to pixel coordinates.
+	function proj(width, height, viewProj, pos) {
+		var pos = [pos[0], pos[1], pos[2], 1.0];
+		vec4.transformMat4(pos, pos, viewProj);
+		pos = Vec3.scale(pos, 1.0 / pos[3]);
+		return [(pos[0] + 1.0) * width / 2.0, (1.0 - pos[1]) * height / 2.0];
+	}
+	
+	// Gets the pixel coordinates for the given position in this editor.
+	this.prototype.proj = function(pos) {
+		return proj(this.canvas.width, this.canvas.height, this.getViewProj(), pos);
+	}
+	
+	// Gets a set of pixel vectors corresponding to how a world-space
+	// unit vector appears at the given position. The vectors are returned
+	// as an length 3 array indexed by axis.
+	this.prototype.projCompass = function(pos) {
+		var width = this.canvas.width;
+		var height = this.canvas.height;
+		var viewProj = this.getViewProj();
+		var base = proj(width, height, viewProj, pos);
+		var res = new Array(3);
+		for (var i = 0; i < 3; i++) {
+			var cur = proj(width, height, viewProj, Vec3.add(pos, Vec3.getUnit(i, false)));
+			res[i] = Vec2.sub(cur, base);
+		}
+		return res;
+	}
+	
 	// Gets the ray (an object with 'pos' and 'dir') projected from the point
 	// at the given pixel coordinates in the canvas of this editor.
-	this.prototype.projectPoint = function(x, y) {
-		x = x * 2.0 / this.canvas.width - 1.0;
-		y = 1.0 - y * 2.0 / this.canvas.height;
+	this.prototype.unproj = function(point) {
+		x = point[0] * 2.0 / this.canvas.width - 1.0;
+		y = 1.0 - point[1] * 2.0 / this.canvas.height;
 		
 		var viewProj = this.getViewProj();
 		var iViewProj = mat4.create();
@@ -493,8 +643,8 @@ function Editor(canvas, node, undo) {
 	
 	// Gets the control for the object at the given coordinates in this editor.
 	// Returns null if there is no selectable object at the coordinates.
-	this.prototype.select = function(x, y) {
-		var ray = this.projectPoint(x, y);
+	this.prototype.select = function(point) {
+		var ray = this.unproj(point);
 		var best = null;
 		var bestDis = Infinity;
 		for (var i = 0; i < this.boxes.length; i++) {

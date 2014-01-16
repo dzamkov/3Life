@@ -209,9 +209,11 @@ function Space(dimension) {
 			var max = new Array(dimension);
 			for (var i = 0; i < vec.length; i++) {
 				if ((index & (1 << i)) != 0) {
+					min[i] = this.min[i];
 					max[i] = vec[i];
 				} else {
 					min[i] = vec[i];
+					max[i] = this.max[i];
 				}
 			}
 			return new Bound(min, max);
@@ -791,6 +793,22 @@ var Vec3 = Volume.Vector;
 		var norm = Vec3.normalize(Vec3.sub(point, center));
 		return { dis : dis, point : point, norm : norm };
 	}
+	
+	// Finds the closest points between two lines, their parameters, and their distance.
+	function traceLine(aPos, aDir, bPos, bDir) {
+		var v = Vec3.dot(aDir, bDir);
+		var dif = Vec3.sub(bPos, aPos);
+		var al = Vec3.dot(aDir, dif);
+		var bl = Vec3.dot(bDir, dif);
+		var den = v * v - 1.0;
+		var aParam = (v * bl - al) / den;
+		var bParam = (bl - v * al) / den;
+		var aPoint = Vec3.add(aPos, Vec3.scale(aDir, aParam));
+		var bPoint = Vec3.add(bPos, Vec3.scale(bDir, bParam));
+		var dis = Vec3.len(Vec3.sub(aPoint, bPoint));
+		return { dis : dis, aParam : aParam, bParam : bParam, 
+			aPoint : aPoint, bPoint : bPoint };
+	}
 
 	// Define exports.
 	this.Vector.cross = cross;
@@ -799,4 +817,5 @@ var Vec3 = Volume.Vector;
 	this.nearTransformed = nearTransformed;
 	this.tracePlane = tracePlane;
 	this.traceSphere = traceSphere;
+	this.traceLine = traceLine;
 }).call(Volume);

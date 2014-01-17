@@ -8,6 +8,7 @@ var Matter = new function() {
 	// Represents a volume that is not visible, and thus can 
 	// be rendered in any way.
 	var inside = Node.leaf();
+	inside.substance = Substance.empty;
 	
 	// Gets the leaf node for the given substance.
 	function lookup(substance) {

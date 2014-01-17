@@ -5,10 +5,7 @@ function Editor(canvas, node, undo) {
 	this.gl = createGLContext(canvas);
 	this.node = node;
 	this.camera = new Editor.Camera([-0.1, 0.0, 0.1], 0.0, -0.8); 
-	this.scene = new Render.Scene();
-	this.renderer = new Render.Direct(Volume, this.scene.pushMatterLeaf.bind(this.scene));
-	this.renderer.set(node);
-	this.scene.flush(this.gl);
+	this.renderNode = function() { }
 	this.getMovement = Input.Signal.wasd.link(canvas);
 	this.maxDis = 0.5;
 	this.minDis = 0.001;
@@ -608,8 +605,7 @@ function Editor(canvas, node, undo) {
 	// Sets the node for this editor.
 	this.prototype.setNode = function(node) {
 		this.node = node;
-		this.renderer.update(node);
-		this.scene.flush(this.gl);
+		this.renderNode = Render.prepareRenderNode(this.gl, node, 1.0, Vec3.zero);
 	}
 	
 	// Gets the current viewProj matrix for this editor.
@@ -736,7 +732,7 @@ function Editor(canvas, node, undo) {
 		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 		
 		var viewProj = this.getViewProj();
-		this.scene.render(gl, viewProj);
+		this.renderNode(viewProj);
 		if (this.dragHandler) {
 			this.dragHandler.renderIndicator(this, gl, viewProj);
 		} else if (this.control) {
@@ -764,10 +760,12 @@ function Editor(canvas, node, undo) {
 		// Compute camera distance from matter in the scene.
 		function pred(node) { return node !== Matter.empty; }
 		for (var i = 0; i < 3; i++) {
-			var near = Volume.nearTransformed(pred, this.node, 1.0, [0.0, 0.0, 0.0], this.camera.pos, this.maxDis);
+			var near = Volume.nearTransformed(pred, this.node, 1.0, 
+				Vec3.zero, this.camera.pos, this.maxDis);
 			this.lastDis = near ? near.dis : this.maxDis;
 			if (near && near.dis < this.minDis) {
-				this.camera.pos = Vec3.add(this.camera.pos, Vec3.scale(near.norm, this.minDis - near.dis));
+				this.camera.pos = Vec3.add(this.camera.pos, 
+					Vec3.scale(near.norm, this.minDis - near.dis));
 			} else break;
 		}
 	}

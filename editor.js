@@ -20,7 +20,7 @@ function Editor(canvas, node, undo) {
 	this.boxes = [new Editor.Box(new Volume.Bound(
 		[0 * t, 0 * t, -20 * t],
 		[40 * t, 40 * t, -16 * t]), t)];
-	this.plane = new Editor.Plane(this.boxes[0], 2, -19 * t, -17 * t, true);
+	this.plane = new Editor.Plane(this.boxes[0], 2, -17 * t, -19 * t);
 	
 	this.renderPlane = null;
 	this.renderPlaneFor = null;
@@ -33,20 +33,6 @@ function Editor(canvas, node, undo) {
 			editor.dragHandler.update(editor, point);
 		} else {
 			editor.control = editor.select(point);
-		}
-	});
-	
-	var lastTime = new Date().getTime();
-	Event.register(canvas, 'mousewheel', function(event) {
-		var time = new Date().getTime();
-		if (time > lastTime + 200.0) {
-			lastTime = time;
-			var d = Math.round(event.wheelDelta / 40.0);
-			d = Math.min(1, Math.max(-1, d));
-			var f = window.keyStates[16] ? 0 : d;
-			var b = d;
-			editor.plane = editor.plane.scroll(f, b);
-			editor.control = null;
 		}
 	});
 	
@@ -128,8 +114,8 @@ function Editor(canvas, node, undo) {
 	// Describes a selection box for an editor. The selection box covers a
 	// volume aligned to a cubic grid of a given scale. It is possible for a
 	// selection box to extend infinitely in one or more directions.
-	function Box(bounds, scale) {
-		this.bounds = bounds;
+	function Box(bound, scale) {
+		this.bound = bound;
 		this.scale = scale;
 	}
 	
@@ -137,22 +123,20 @@ function Editor(canvas, node, undo) {
 	(function() {
 	
 		// Sets the bound for this box.
-		this.prototype.setBound = function(bounds) {
-			return new Box(bounds, this.scale);
+		this.prototype.setBound = function(bound) {
+			return new Box(bound, this.scale);
 		}
 	
 	}).call(Box);
 	
-	// Describes an edit plane for an editor. An edit plane is a "slice" of a
-	// a selection box that can be "painted" on. Edits made on the plane will
-	// extend a certain distance behind the plane, dictated by the plane's "depth".
-	function Plane(box, axis, min, max, flip) {
+	// Describes an edit plane for an editor. An edit plane is made up of two
+	// parallel slices of a selection boxes. The "leading" slice can be painted
+	// on to make edits that extend to the "trailing" slice.
+	function Plane(box, axis, lead, trail) {
 		this.box = box;
 		this.axis = axis;
-		this.min = min;
-		this.max = max;
-		this.flip = flip;
-		this.pos = flip ? max : min;
+		this.lead = lead;
+		this.trail = trail;
 	}
 	
 	// Define 'Plane' methods.
@@ -162,7 +146,7 @@ function Editor(canvas, node, undo) {
 		// returning null if the position is outside the bounds of this plane.
 		this.prototype.getBlock = function(pos) {
 			var scale = this.box.scale;
-			var pBounds = this.box.bounds.proj(this.axis);
+			var pBounds = this.box.bound.proj(this.axis);
 			var pMin = Vec2.align(pos, scale);
 			var pMax = Vec2.add(pMin, [scale, scale]);
 			var pBlock = new Area.Bound(pMin, pMax);
@@ -171,53 +155,29 @@ function Editor(canvas, node, undo) {
 		
 		// Projects a block on this plane, described by its 2d bounds, into 3d space.
 		this.prototype.unprojBlock = function(block) {
-			return block.unproj(this.axis, this.min, this.max);
-		}
-		
-		// Moves this plane along its axis by the given block amounts.
-		this.prototype.scroll = function(front, back) {
-			var bMin = this.box.bounds.min[this.axis];
-			var bMax = this.box.bounds.max[this.axis];
-			var scale = this.box.scale;
-			var flip = this.flip;
-			var min = this.min + (flip ? -back : front) * scale;
-			var max = this.max + (flip ? -front : back) * scale;
-			if (min >= max) {
-				if (flip) {
-					min = max - scale;
-				} else {
-					max = min + scale;
-				}
-			}
-			if (min < bMin) {
-				min = bMin;
-				max = Math.max(max, min + scale);
-			}
-			if (max > bMax) {
-				max = bMax;
-				min = Math.min(min, max - scale);
-			}
-			return new Plane(this.box, this.axis, min, max, flip);
+			return block.unproj(this.axis,
+				Math.min(this.lead, this.trail),
+				Math.max(this.lead, this.trail));
 		}
 
-		// Sets the box for this plane, automatically adjusting min and
-		// max if they are out of range.
+		// Sets the box for this plane, automatically adjusting the
+		// position of its slices if they are out of the bound.
 		this.prototype.setBox = function(box) {
-			var bMin = box.bounds.min[this.axis];
-			var bMax = box.bounds.max[this.axis];
-			var min = this.min;
-			var max = this.max;
-			if (min < bMin) {
-				min = bMin;
-				max = Math.max(max, min + box.scale);
+			var bMin = box.bound.min[this.axis];
+			var bMax = box.bound.max[this.axis];
+			var lead = Math.min(bMax, Math.max(bMin, this.lead));
+			var trail = Math.min(bMax, Math.max(bMin, this.trail));
+			if (lead == trail) {
+				if (lead == bMin) {
+					if (this.lead > this.trail) lead = bMin + box.scale;
+					else trail = bMin + box.scale;
+				} else { // lead == bMax
+					if (this.lead > this.trail) trail = bMax - box.scale;
+					else lead = bMax - box.scale;
+				}
 			}
-			if (max > bMax) {
-				max = bMax;
-				min = Math.min(min, max - box.scale);
-			}
-			return new Plane(box, this.axis, min, max, this.flip);
-		}
-		
+			return new Plane(box, this.axis, lead, trail);
+		}		
 	}).call(Plane);
 	
 	// Creates a mesh for a line grid. The mesh is on the XY plane, and each square
@@ -265,29 +225,28 @@ function Editor(canvas, node, undo) {
 	
 	// Creates and returns a function to render a selection plane.
 	function prepareRenderPlane(gl, plane) {
-		var bounds = plane.box.bounds;
 		var scale = plane.box.scale;
 		var axis = plane.axis;
-		var pBounds = bounds.proj(axis);
-		var pBasePos = pBounds.min;
-		var size = pBounds.getSize();
-		var primaryPos = Vec3.unproj(pBasePos, axis, plane.flip ? plane.max : plane.min);
-		var secondaryPos = Vec3.unproj(pBasePos, axis, plane.flip ? plane.min : plane.max);
+		var pBound = plane.box.bound.proj(axis);
+		var pBasePos = pBound.min;
+		var size = pBound.getSize();
+		var leadPos = Vec3.unproj(pBasePos, axis, plane.lead);
+		var trailPos = Vec3.unproj(pBasePos, axis, plane.trail);
 		var width = size[0] / scale;
 		var height = size[1] / scale;
 		
-		var primary = mat4.create();
-		mat4.identity(primary);
-		mat4.translate(primary, primary, primaryPos);
-		mat4.scale(primary, primary, [scale, scale, scale]);
-		mat4.multiply(primary, primary, permuteMatrices[axis]);
+		var lead = mat4.create();
+		mat4.identity(lead);
+		mat4.translate(lead, lead, leadPos);
+		mat4.scale(lead, lead, [scale, scale, scale]);
+		mat4.multiply(lead, lead, permuteMatrices[axis]);
 		
-		var secondary = mat4.create();
-		mat4.identity(secondary);
-		mat4.translate(secondary, secondary, secondaryPos);
-		mat4.scale(secondary, secondary, [scale, scale, scale]);
-		mat4.multiply(secondary, secondary, permuteMatrices[axis]);
-		mat4.scale(secondary, secondary, [width, height, 1.0]);
+		var trail = mat4.create();
+		mat4.identity(trail);
+		mat4.translate(trail, trail, trailPos);
+		mat4.scale(trail, trail, [scale, scale, scale]);
+		mat4.multiply(trail, trail, permuteMatrices[axis]);
+		mat4.scale(trail, trail, [width, height, 1.0]);
 		
 		var program = lineProgram.get(gl);
 		var gridMesh = lineGridMesh(width, height).create(gl);
@@ -296,13 +255,13 @@ function Editor(canvas, node, undo) {
 			gl.render(program, gridMesh, {
 				color : [0.1, 0.6, 0.9, 1.0],
 				scale : scale * 0.06,
-				model : primary,
+				model : lead,
 				view : view, // TODO: Rename view uniforms to viewProj
 				eyePos : eyePos });
 			gl.render(program, squareMesh, {
 				color : [0.4, 0.4, 0.4, 1.0],
 				scale : scale * 0.04,
-				model : secondary,
+				model : trail,
 				view : view,
 				eyePos : eyePos });
 		}
@@ -310,11 +269,11 @@ function Editor(canvas, node, undo) {
 	
 	// Renders a selection box.
 	function renderBox(gl, box, view, eyePos) {
-		var bounds = box.bounds;
+		var bound = box.bound;
 		var model = mat4.create();
 		mat4.identity(model);
-		mat4.translate(model, model, bounds.min);
-		mat4.scale(model, model, Vec3.sub(bounds.max, bounds.min));
+		mat4.translate(model, model, bound.min);
+		mat4.scale(model, model, Vec3.sub(bound.max, bound.min));
 		var scale = box.scale;
 		var program = lineProgram.get(gl);
 		var mesh = Mesh.Line.cube.get(gl);
@@ -381,7 +340,7 @@ function Editor(canvas, node, undo) {
 			this.prototype.update = function(editor, point) {
 				var plane = editor.plane;
 				var ray = editor.unproj(point);
-				var res = Volume.tracePlane(plane.axis, plane.pos, ray.pos, ray.dir);
+				var res = Volume.tracePlane(plane.axis, plane.lead, ray.pos, ray.dir);
 				if (res) {
 					var block = editor.plane.getBlock(res.param);
 					if (block) {
@@ -477,7 +436,6 @@ function Editor(canvas, node, undo) {
 		// Define 'Box' methods.
 		(function() {
 			this.prototype = Object.create(DragHandler.prototype);
-			this.prototype.renderIndicator = function(editor, gl, viewProj) { }
 			this.prototype.update = function(editor, point) {
 				var axis = this.axis;
 				if (axis === null) {
@@ -502,7 +460,7 @@ function Editor(canvas, node, undo) {
 				param = Math.round(param / scale) * scale;
 				var nPoint = Vec3.add(this.startPos, Vec3.scale(axisDir, param));
 				if (nPoint[axis] != this.startPos[axis]) this.axis = axis;
-				var nBox = box.setBound(box.bounds.setCorner(this.cornerIndex, nPoint));
+				var nBox = box.setBound(box.bound.setCorner(this.cornerIndex, nPoint));
 				var plane = editor.plane;
 				if (plane && plane.box == box) {
 					editor.plane = plane.setBox(nBox);
@@ -511,11 +469,44 @@ function Editor(canvas, node, undo) {
 			}
 			this.prototype.end = function(editor) { }
 		}).call(Box);
-	
+		
+		// A drag handler for adjusting the position of an edit plane.
+		function Plane(box, axis, lead, pPos) {
+			this.box = box;
+			this.axis = axis;
+			this.lead = lead;
+			this.pPos = pPos;
+		}
+		
+		// Define 'Plane' methods.
+		(function() {
+			this.prototype = Object.create(DragHandler.prototype);
+			this.prototype.update = function(editor, point) {
+				var ray = editor.unproj(point);
+				var aPos = Vec3.unproj(this.pPos, this.axis, 0.0);
+				var aDir = Vec3.getUnit(this.axis, false);
+				var res = Volume.traceLine(aPos, aDir, ray.pos, ray.dir);
+				var param = Math.round(res.aParam / this.box.scale) * this.box.scale;
+				var bound = this.box.bound;
+				param = Math.min(bound.max[this.axis], Math.max(bound.min[this.axis], param));
+				var plane = editor.plane;
+				if (this.lead) {
+					if (param != plane.trail) {
+						editor.plane = new Editor.Plane(plane.box, this.axis, param, plane.trail);
+					}
+				} else {
+					if (param != plane.lead) {
+						editor.plane = new Editor.Plane(plane.box, this.axis, plane.lead, param);
+					}
+				}
+			}
+		}).call(Plane);
+		
 		// Define exports.
 		this.none = none;
 		this.Paint = Paint;
 		this.Box = Box;
+		this.Plane = Plane;
 	}).call(DragHandler);
 	
 	// Identifies an object in the editor that can be selected, dragged or painted.
@@ -558,21 +549,57 @@ function Editor(canvas, node, undo) {
 			this.prototype = Object.create(Control.prototype);
 			this.prototype.renderIndicator = function(editor, gl, viewProj) {
 				var box = editor.boxes[this.boxIndex];
-				var pos = box.bounds.getCorner(this.cornerIndex);
+				var pos = box.bound.getCorner(this.cornerIndex);
 				var rad = box.scale * 0.5;
 				var dif = [rad, rad, rad];
 				var bound = new Volume.Bound(Vec3.sub(pos, dif), Vec3.add(pos, dif));
 				renderBlock(gl, bound, viewProj);
 			}
 			this.prototype.begin = function(editor, point) { 
-				var pos = editor.boxes[this.boxIndex].bounds.getCorner(this.cornerIndex);
+				var pos = editor.boxes[this.boxIndex].bound.getCorner(this.cornerIndex);
 				return new DragHandler.Box(point, pos, this.boxIndex, this.cornerIndex);
 			}
 		}).call(Box);
 		
+		// A control for adjusting or setting an edit plane.
+		function Plane(box, axis, pPos, param) {
+			this.box = box;
+			this.axis = axis;
+			this.pPos = pPos;
+			this.param = param;
+		}
+		
+		// Define 'Plane' methods.
+		(function() {
+			this.prototype = Object.create(Control.prototype);
+			this.prototype.renderIndicator = function(editor, gl, viewProj) {
+				var pos = Vec3.unproj(this.pPos, this.axis, this.param);
+				var rad = this.box.scale * 0.4;
+				var dif = [rad, rad, rad];
+				dif[this.axis] *= 0.7;
+				var bound = new Volume.Bound(Vec3.sub(pos, dif), Vec3.add(pos, dif));
+				renderBlock(gl, bound, viewProj);
+			}
+			this.prototype.begin = function(editor, point) {
+				var plane = editor.plane;
+				if (this.axis == plane.axis) {
+					if (this.param == plane.lead)
+						return new DragHandler.Plane(this.box, this.axis, true, this.pPos);
+					if (this.param == plane.trail)
+						return new DragHandler.Plane(this.box, this.axis, false, this.pPos);
+				}
+				var scale = this.box.scale;
+				var tDir = (editor.camera.pos[this.axis] > this.param) ? -scale : scale;
+				var trail = this.param + tDir;
+				editor.plane = new Editor.Plane(this.box, this.axis, this.param, trail);
+				return new DragHandler.Plane(this.box, this.axis, false, this.pPos);
+			}
+		}).call(Plane);
+		
 		// Define exports.
 		this.Paint = Paint;
 		this.Box = Box;
+		this.Plane = Plane;
 	}).call(Control);
 	
 	// Sets the node for this editor.
@@ -650,7 +677,7 @@ function Editor(canvas, node, undo) {
 		for (var i = 0; i < this.boxes.length; i++) {
 			var box = this.boxes[i];
 			for (var j = 0; j < 8; j++) {
-				var corner = box.bounds.getCorner(j);
+				var corner = box.bound.getCorner(j);
 				var radius = box.scale * 0.5;
 				var res = Volume.traceSphere(corner, radius, ray.pos, ray.dir);
 				if (res && res.dis < bestDis) {
@@ -658,8 +685,25 @@ function Editor(canvas, node, undo) {
 					bestDis = res.dis;
 				}
 			}
+			for (var axis = 0; axis < 3; axis++) {
+				var pBound = box.bound.proj(axis);
+				for (var j = 0; j < 4; j++) {
+					var pPos = pBound.getCorner(j);
+					var aPos = Vec3.unproj(pPos, axis, 0.0);
+					var aDir = Vec3.getUnit(axis, false);
+					var res = Volume.traceLine(aPos, aDir, ray.pos, ray.dir);
+					var radius = box.scale * 0.4;
+					if (res && res.dis < radius && res.bParam < bestDis) {
+						var param = Math.round(res.aParam / box.scale) * box.scale;
+						if (param > box.bound.min[axis] && param < box.bound.max[axis]) {
+							best = new Control.Plane(box, axis, pPos, param);
+							bestDis = res.bParam;
+						}
+					}
+				}
+			}
 		}
-		var res = Volume.tracePlane(this.plane.axis, this.plane.pos, ray.pos, ray.dir);
+		var res = Volume.tracePlane(this.plane.axis, this.plane.lead, ray.pos, ray.dir);
 		if (res && res.dis < bestDis) {
 			var pBlock = this.plane.getBlock(res.param);
 			if (pBlock) {

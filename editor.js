@@ -4,7 +4,7 @@ function Editor(canvas, node, undo) {
 	this.canvas = canvas;
 	this.gl = createGLContext(canvas);
 	this.node = node;
-	this.camera = new Editor.Camera([0.0, 0.15, 0.0], 0.0, -0.8); 
+	this.camera = new Editor.Camera([-0.1, 0.0, 0.1], 0.0, -0.8); 
 	this.scene = new Render.Scene();
 	this.renderer = new Render.Direct(Volume, this.scene.pushMatterLeaf.bind(this.scene));
 	this.renderer.set(node);
@@ -18,9 +18,9 @@ function Editor(canvas, node, undo) {
 	
 	var t = 1.0 / (1 << 7);
 	this.boxes = [new Editor.Box(new Volume.Bound(
-		[0 * t, 0 * t, -20 * t],
-		[40 * t, 40 * t, -16 * t]), t)];
-	this.plane = new Editor.Plane(this.boxes[0], 2, -17 * t, -19 * t);
+		[-8 * t, -8 * t, -8 * t],
+		[8 * t, 8 * t, 8 * t]), t)];
+	this.plane = new Editor.Plane(this.boxes[0], 2, 0 * t, -1 * t);
 	
 	this.renderPlane = null;
 	this.renderPlaneFor = null;
@@ -352,7 +352,7 @@ function Editor(canvas, node, undo) {
 				var node = editor.node;
 				for (var i = 0; i < this.blocks.length; i++) {
 					var pBlock = editor.plane.unprojBlock(this.blocks[i]);
-					node = node.splice(pBlock, Gol.getMatter.live);
+					node = node.splice(pBlock, editor.getDrawNode());
 				}
 				editor.setNode(node);
 			}
@@ -451,6 +451,9 @@ function Editor(canvas, node, undo) {
 						}
 					}
 				}
+				
+				// TODO: Prevent inverting the box.
+				
 				var axisDir = Vec3.getUnit(axis, false);
 				var ray = editor.unproj(point);
 				var param = Volume.traceLine(this.startPos,
@@ -618,6 +621,15 @@ function Editor(canvas, node, undo) {
 		return viewProj;
 	}
 	
+	// Gets the node that is drawn in a draw operation.
+	this.prototype.getDrawNode = function() {
+		if (window.keyStates[32]) {
+			return Gol.getMatter.dead;
+		} else {
+			return Gol.getMatter.live;
+		}
+	}
+	
 	// Projects a world position to pixel coordinates.
 	function proj(width, height, viewProj, pos) {
 		var pos = [pos[0], pos[1], pos[2], 1.0];
@@ -693,7 +705,7 @@ function Editor(canvas, node, undo) {
 					var aDir = Vec3.getUnit(axis, false);
 					var res = Volume.traceLine(aPos, aDir, ray.pos, ray.dir);
 					var radius = box.scale * 0.4;
-					if (res && res.dis < radius && res.bParam < bestDis) {
+					if (res.bParam > 0.0 && res.dis < radius && res.bParam < bestDis) {
 						var param = Math.round(res.aParam / box.scale) * box.scale;
 						if (param > box.bound.min[axis] && param < box.bound.max[axis]) {
 							best = new Control.Plane(box, axis, pPos, param);

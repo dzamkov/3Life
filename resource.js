@@ -296,72 +296,75 @@ function Mesh(mode, vertexData, indexData, vertexSize, attributes) {
 		return create(mode, vertexData, indexData, vertexSize, attributes);
 	}
 	
-	// Creates a new 'Mesh' object using a procedure that takes a builder. Vertices
-	// and primitives can be added to the mesh by calling appropriate methods on
-	// the builder inside the 'build' procedure.
-	function createBuilder(mode, vertexSize, attributes, build) {
-		var builder = { };
-		var vertexData = new Float32Array(vertexSize * 16);
-		var vertexCount = 0;
-		var indexData = new Uint16Array(16);
-		var indexCount = 0;
+	// A temporary storage for geometry data that can be appended to and converting into
+	// a mesh.
+	function Builder(mode, vertexSize, attributes, vertexCapacity, indexCapacity) {
+		this.mode = mode;
+		this.vertexSize = vertexSize;
+		this.attributes = attributes;
+		this.vertexData = new Float32Array(vertexSize * vertexCapacity);
+		this.vertexCount = 0;
+		this.indexData = new Uint16Array(indexCapacity);
+		this.indexCount = 0;
+	}
 	
-		// Outputs a vertex and returns its index. The vertex is described
-		// by its arguments, which can be vectors or numbers. Each argument
-		// corresponds to a value for the corresponding attribute (ordered
-		// by offset).
-		builder.vertex = function() {
-			var index = vertexCount;
-			var offset = index * vertexSize;
-			vertexCount++;
-			if (offset >= vertexData.length) {
-				var nVertexData = new Float32Array(vertexData.length * 2);
-				nVertexData.set(vertexData);
-				vertexData = nVertexData;
+	// Define 'Builder' methods.
+	(function() {
+	
+		// Appends a vertex and returns its index. The vertex is described by its 
+		// arguments, which can be vectors or numbers. Each argument describes the value
+		// for the corresponding attribute (ordered by offset).
+		this.prototype.vertex = function() {
+			var index = this.vertexCount;
+			var offset = index * this.vertexSize;
+			this.vertexCount++;
+			if (offset >= this.vertexData.length) {
+				var nVertexData = new Float32Array(this.vertexData.length * 2);
+				nVertexData.set(this.vertexData);
+				this.vertexData = nVertexData;
 			}
 			for (var i = 0; i < arguments.length; i++) {
 				var arg = arguments[i];
 				if (arg instanceof Array) {
 					for (var j = 0; j < arg.length; j++) {
-						vertexData[offset] = arg[j];
+						this.vertexData[offset] = arg[j];
 						offset++;
 					}
 				} else {
-					vertexData[offset] = arg;
+					this.vertexData[offset] = arg;
 					offset++;
 				}
 			}
 			return index;
 		}
 		
-		// Outputs an index.
-		builder.index = function(index) {
-			var offset = indexCount;
-			indexCount++;
-			if (offset >= indexData.length) {
-				var nIndexData = new Uint16Array(indexData.length * 2);
-				nIndexData.set(indexData);
-				indexData = nIndexData;
+		// Appends an index.
+		this.prototype.index = function(index) {
+			var offset = this.indexCount;
+			this.indexCount++;
+			if (offset >= this.indexData.length) {
+				var nIndexData = new Uint16Array(this.indexData.length * 2);
+				nIndexData.set(this.indexData);
+				this.indexData = nIndexData;
 			}
-			indexData[offset] = index;
+			this.indexData[offset] = index;
 		}
 		
-		// Outputs a quad given the indices of its
-		// four vertices (Triangles mode only).
-		if (mode === Mode.Triangles) {
-			builder.quad = function(a, b, c, d) {
-				this.index(a);
-				this.index(b);
-				this.index(c);
-				this.index(c);
-				this.index(b);
-				this.index(d);
-			}
+		// Outputs a quad given the indices of its four vertices.
+		this.prototype.quad = function(a, b, c, d) {
+			if (this.mode != Mode.Triangles) notImplemented();
+			this.index(a);
+			this.index(b);
+			this.index(c);
+			this.index(c);
+			this.index(b);
+			this.index(d);
 		}
 		
-		// Outputs a line, assuming that the resulting mesh
-		// will be interpreted using a line shader.
-		builder.line = function(from, to, thickness, dir) {
+		// Outputs a line, assuming that the resulting mesh will be rendered using a line
+		// program. If the 'dir' attribute is not specified, it will be calculated from
+		// the position attributes.
+		this.prototype.line = function(from, to, thickness, dir) {
 			if (!dir) {
 				var Vector = Space.get(to.length).Vector;
 				dir = Vector.normalize(Vector.sub(to, from));
@@ -373,19 +376,35 @@ function Mesh(mode, vertexData, indexData, vertexSize, attributes) {
 			this.quad(a, b, c, d);
 		}
 		
-		// Build geometry.
+		// Creates a 'Mesh' from the current contents of this builder.
+		this.prototype.finish = function() {
+			var nVertexData = new Float32Array(this.vertexSize * this.vertexCount);
+			var nIndexData = new Uint16Array(this.indexCount);
+			nVertexData.set(this.vertexData.subarray(0, nVertexData.length));
+			nIndexData.set(this.indexData.subarray(0, nIndexData.length));
+			return create(this.mode, nVertexData, nIndexData,
+				this.vertexSize, this.attributes);
+		}
+		
+		// Creates a 'Mesh' from the current contents of this builder, using the builder's
+		// data directly. This avoids copying and allocating additional arrays, but may
+		// cause unnecessarily large arrays to remain in memory.
+		this.prototype.finishQuick = function() {
+			return create(this.mode, 
+				this.vertexData.subarray(0, this.vertexSize * this.vertexCount),
+				this.indexData.subarray(0, this.indexCount),
+				this.vertexSize, this.attributes);
+		}
+		
+	}).call(Builder);
+	
+	// Creates a new 'Mesh' object using a procedure that takes a builder. Vertices
+	// and primitives can be added to the mesh by calling appropriate methods on
+	// the builder inside the 'build' procedure.
+	function createBuilder(mode, vertexSize, attributes, build) {
+		var builder = new Builder(mode, vertexSize, attributes, 16, 16);
 		build(builder);
-		
-		// Resize geometry data.
-		var nVertexData = new Float32Array(vertexSize * vertexCount);
-		var nIndexData = new Uint16Array(indexCount);
-		nVertexData.set(vertexData.subarray(0, nVertexData.length));
-		nIndexData.set(indexData.subarray(0, nIndexData.length));
-		vertexData = nVertexData;
-		indexData = nIndexData;
-		
-		// Create mesh.
-		return create(mode, vertexData, indexData, vertexSize, attributes);
+		return builder.finish();
 	}
 	
 	// Contains common meshes for block shader programs.
@@ -451,6 +470,7 @@ function Mesh(mode, vertexData, indexData, vertexSize, attributes) {
 	this.Mode = Mode;
 	this.create = create;
 	this.createExpanded = createExpanded;
+	this.Builder = Builder;
 	this.createBuilder = createBuilder;
 }).call(Mesh);
 

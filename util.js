@@ -407,6 +407,11 @@ function HashMap(initialCapacity) {
 	
 }).call(HashMap);
 
+// Throws a not-implemented exception.
+function notImplemented() {
+	throw "Not implemented";
+}
+
 // Creates a WebGLRenderingContext for the given canvas element.
 function createGLContext(canvas) {
 	var gl = canvas.getContext('experimental-webgl') ||

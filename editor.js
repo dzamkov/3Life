@@ -451,7 +451,7 @@ function Editor(canvas, node, undo) {
 				
 				// TODO: Prevent inverting the box.
 				
-				var axisDir = Vec3.getUnit(axis, false);
+				var axisDir = Vec3.getUnit(axis, true);
 				var ray = editor.unproj(point);
 				var param = Volume.traceLine(this.startPos,
 					axisDir, ray.pos, ray.dir).aParam;
@@ -649,7 +649,7 @@ function Editor(canvas, node, undo) {
 		var base = proj(width, height, viewProj, pos);
 		var res = new Array(3);
 		for (var i = 0; i < 3; i++) {
-			var cur = proj(width, height, viewProj, Vec3.add(pos, Vec3.getUnit(i, false)));
+			var cur = proj(width, height, viewProj, Vec3.add(pos, Vec3.getUnit(i, true)));
 			res[i] = Vec2.sub(cur, base);
 		}
 		return res;
@@ -698,7 +698,7 @@ function Editor(canvas, node, undo) {
 				for (var j = 0; j < 4; j++) {
 					var pPos = pBound.getCorner(j);
 					var aPos = Vec3.unproj(pPos, axis, 0.0);
-					var aDir = Vec3.getUnit(axis, false);
+					var aDir = Vec3.getUnit(axis, true);
 					var res = Volume.traceLine(aPos, aDir, ray.pos, ray.dir);
 					var radius = box.scale * 0.4;
 					if (res.bParam > 0.0 && res.dis < radius && res.bParam < bestDis) {

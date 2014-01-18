@@ -36,7 +36,7 @@ var Render = new function() {
 					var pBound = bound.proj(axis);
 					for (var i = 0; i < 2; i++) {
 						var val = (i == 1) ? bound.max[axis] : bound.min[axis];
-						var norm = Vec3.getUnit(axis, i == 0);
+						var norm = Vec3.getUnit(axis, i == 1);
 						var material = substance.getFaceMaterial(axis, i == 1);
 						var builder = getBuilder(builders, material);
 						for (var j = 0; j < 4; j++) {

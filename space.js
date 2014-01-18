@@ -54,8 +54,8 @@ function Space(dimension) {
 		}
 		
 		// Gets a specific unit vector for this dimension.
-		function getUnit(axis, flip) {
-			return unit[flip ? (axis + dimension) : axis];
+		function getUnit(axis, up) {
+			return unit[up ? axis : (axis) + dimension];
 		}
 		
 		// Scales a vector by a given amount.
@@ -679,7 +679,7 @@ var Vec3 = Volume.Vector;
 		return {
 			dis : Math.abs(pos[axis] - val),
 			point : point,
-			norm : Vec3.getUnit(axis, pos[axis] < val)
+			norm : Vec3.getUnit(axis, pos[axis] > val)
 		}
 	}
 	
@@ -708,7 +708,7 @@ var Vec3 = Volume.Vector;
 					return {
 						dis : minDis,
 						point : point,
-						norm : Vec3.getUnit(axis, !flip)
+						norm : Vec3.getUnit(axis, flip)
 					}
 				}
 				
@@ -809,7 +809,7 @@ var Vec3 = Volume.Vector;
 		// TODO: return null if ray is going in the wrong direction.
 		var param = Vec2.add(pPos, Vec2.scale(pDir, pDis));
 		var point = Vec3.unproj(param, axis, val);
-		var norm = Vec3.getUnit(axis, aDir > 0.0);
+		var norm = Vec3.getUnit(axis, aDir < 0.0);
 		var dis = Math.sqrt(pDis * pDis + aDis * aDis);
 		return { dis : dis, point : point, norm : norm, param : param };
 	}

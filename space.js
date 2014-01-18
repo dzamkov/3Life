@@ -164,16 +164,11 @@ function Space(dimension) {
 	// Define Bound functions and values.
 	(function() {
 		
-		// Construct a unit (edge-length 1) bound centered
-		// on the origin. This defines the local coordinate system
-		// for a node of this dimension.
-		var min = new Array(dimension);
+		// Construct a unit (edge-length 1) bound with its minimum point on the origin.
+		// This defines the local coordinate system for a node of this dimension.
 		var max = new Array(dimension);
-		for (var i = 0; i < dimension; i++) {
-			min[i] = -0.5;
-			max[i] = 0.5;
-		}
-		var unit = new Bound(min, max);
+		for (var i = 0; i < dimension; i++) max[i] = 1.0;
+		var unit = new Bound(Vector.zero, max);
 		
 		// Constructs a bound with the coordinates given
 		// by arguments.
@@ -453,7 +448,7 @@ function Space(dimension) {
 	for (var i = 0; i < size; i++) {
 		offsets[i] = new Array(dimension);
 		for (var j = 0; j < dimension; j++) {
-			offsets[i][j] = ((i & (1 << j)) != 0) ? 0.25 : -0.25;
+			offsets[i][j] = ((i & (1 << j)) != 0) ? 0.5 : 0.0;
 		}
 	}
 	
@@ -624,7 +619,7 @@ var Vec3 = Volume.Vector;
 			a[2] * b[0] - a[0] * b[2],
 			a[0] * b[1] - a[1] * b[0]];
 	}
-
+	
 	// Gets the permutation that sorts the components of the given vector.
 	function sort(vec) {
 		if (vec[0] < vec[1]) {
@@ -650,116 +645,154 @@ var Vec3 = Volume.Vector;
 		}
 	}
 	
-	// Gets the point nearest to the given position that is on a leaf node which
-	// satisfies the given predicate. Also returns the normal at that point, and the
-	// signed distance to the point. Returns null if the node is completely empty. 
-	// This function assumes that the node occupies the cubic area described by
-	// 'Volume.Bound.unit'. The max parameter sets the maximum distance for
-	// which points are considered; this is an optimization, not an absolute;
-	// sometimes, points farther than the max distance will be returned.
-	function near(pred, node, pos, max) {
+	// The most trivial of 'near' class of functions. This returns the point, the normal
+	// between the point and the given position, and the distance between the point
+	// and the position.
+	function nearPoint(point, pos) {
+		var dif = Vec3.sub(pos, point);
+		var dis = Vec3.len(dif);
+		return {
+			dis : dis,
+			point : point,
+			norm : Vec3.scale(dif, 1.0 / dis)
+		}
+	}
+	
+	// Gets information about the nearest point on the given axial line to the given
+	// position.
+	function nearAxialLine(axis, pPoint, pos) {
+		var pPos = Vec3.proj(pos, axis);
+		var pDif = Vec2.sub(pPos, pPoint);
+		var dis = Vec2.len(pDif);
+		return {
+			dis : dis,
+			point : Vec3.unproj(pPoint, axis, pos[axis]),
+			norm : Vec3.unproj(Vec2.scale(pDif, 1.0 / dis), axis, 0.0)
+		}
+	}
+	
+	// Gets information about the nearest point on the given axial plane to the given
+	// position.
+	function nearAxialPlane(axis, val, pos) {
+		var point = Vec3.create(pos);
+		point[axis] = val;
+		return {
+			dis : Math.abs(pos[axis] - val),
+			point : point,
+			norm : Vec3.getUnit(axis, pos[axis] < val)
+		}
+	}
+	
+	// Gets the point nearest to a leaf node of the given node for which the given
+	// predicate returns true.
+	function nearNode(pred, node, scale, offset, pos, max) {
 		if (node.depth == 0) {
 			if (!pred(node)) {
 				return null;
 			} else {
-				var abs = Vec3.abs(pos);
-				
-				// Find the permutation thats sorts the components of 'abs'.
-				var perm = Permutation.sort(abs);
-				
-				// Apply that permutation and see what we get.
-				abs = Permutation.apply(perm, abs);
-				if (abs[1] < 0.5) {
-				
-					// Nearest to a face.
-					var dis = abs[2] - 0.5;
-					var point = Vec3.create(pos);
-					var norm = Vec3.create(Vec3.zero);
-					if (point[perm[2]] > 0.0) {
-						point[perm[2]] = 0.5;
-						norm[perm[2]] = 1.0;
-					} else {
-						point[perm[2]] = -0.5;
-						norm[perm[2]] = -1.0;
+				function inside(pos) {
+					var minDis = Infinity;
+					var axis = 0;
+					for (var i = 0; i < 3; i++) {
+						var dis = Math.abs(pos[i] - offset[i] - scale * 0.5);
+						if (dis < minDis) {
+							minDis = dis;
+							axis = i;
+						}
 					}
-					return { dis : dis, point : point, norm : norm };
-				} else if (abs[0] < 0.5) {
-				
-					// Nearest to an edge.
-					abs[1] -= 0.5; abs[2] -= 0.5;
-					var dis = Math.sqrt(abs[1] * abs[1] + abs[2] * abs[2]);
+					minDis -= scale * 0.5;
 					var point = Vec3.create(pos);
-					point[perm[1]] = (point[perm[1]] > 0.0) ? 0.5 : -0.5;
-					point[perm[2]] = (point[perm[2]] > 0.0) ? 0.5 : -0.5;
-					var norm = Vec3.scale(Vec3.sub(pos, point), 1.0 / dis);
-					return { dis : dis, point : point, norm : norm };
-				} else {
+					var flip = pos[axis] > offset[axis] + scale * 0.5;
+					point[axis] = offset[axis];
+					if (flip) point[axis] += scale;
+					return {
+						dis : minDis,
+						point : point,
+						norm : Vec3.getUnit(axis, !flip)
+					}
+				}
 				
-					// Nearest to a corner.
-					abs[0] -= 0.5; abs[1] -= 0.5; abs[2] -= 0.5;
-					var dis = Vec3.len(abs);
-					var point = Vec3.create(pos);
-					point[0] = (point[0] > 0.0) ? 0.5 : -0.5;
-					point[1] = (point[1] > 0.0) ? 0.5 : -0.5;
-					point[2] = (point[2] > 0.0) ? 0.5 : -0.5;
-					var norm = Vec3.scale(Vec3.sub(pos, point), 1.0 / dis);
-					return { dis : dis, point : point, norm : norm };
+				var nx = offset[0]; var px = nx + scale;
+				var ny = offset[1]; var py = ny + scale;
+				var nz = offset[2]; var pz = nz + scale;
+				
+				var type = 0;
+				if (pos[0] > px) type += 2;
+				else if (pos[0] > nx) type += 1;
+				if (pos[1] > py) type += 6;
+				else if (pos[1] > ny) type += 3;
+				if (pos[2] > pz) type += 18;
+				else if (pos[2] > nz) type += 9;
+				
+				switch(type) {
+					case 0: return nearPoint([nx, ny, nz], pos);
+					case 1: return nearAxialLine(0, [ny, nz], pos);
+					case 2: return nearPoint([px, ny, nz], pos);
+					case 3: return nearAxialLine(1, [nz, nx], pos);
+					case 4: return nearAxialPlane(2, nz, pos);
+					case 5: return nearAxialLine(1, [nz, px], pos);
+					case 6: return nearPoint([nx, py, nz], pos);
+					case 7: return nearAxialLine(0, [py, nz], pos);
+					case 8: return nearPoint([px, py, nz], pos);
+					case 9: return nearAxialLine(2, [nx, ny], pos);
+					case 10: return nearAxialPlane(1, ny, pos);
+					case 11: return nearAxialLine(2, [px, ny], pos);
+					case 12: return nearAxialPlane(0, nx, pos);
+					case 13: return inside(pos);
+					case 14: return nearAxialPlane(0, px, pos);
+					case 15: return nearAxialLine(2, [nx, py], pos);
+					case 16: return nearAxialPlane(1, py, pos);
+					case 17: return nearAxialLine(2, [px, py], pos);
+					case 18: return nearPoint([nx, ny, pz], pos);
+					case 19: return nearAxialLine(0, [ny, pz], pos);
+					case 20: return nearPoint([px, ny, pz], pos);
+					case 21: return nearAxialLine(1, [pz, nx], pos);
+					case 22: return nearAxialPlane(2, pz, pos);
+					case 23: return nearAxialLine(1, [pz, px], pos);
+					case 24: return nearPoint([nx, py, pz], pos);
+					case 25: return nearAxialLine(0, [py, pz], pos); 
+					case 26: return nearPoint([px, py, pz], pos);
 				}
 			}
 		} else {
-			// Returns the result with the smaller distance.
-			function minDis(a, b) {
-				if (b !== null) {
-					if (a === null || b.dis < a.dis) {
-						return b;
-					}
-				}
-				return a;
-			}
-		
-			// Finds the nearest point to a child of the given node.
-			function nearChild(pred, node, index, pos, max) {
-				return nearTransformed(pred, node.children[index],
-					0.5, offsets[index], pos, max * 2.0);
-			}
 			
 			// Check if the node is within the range specified by 'max'. Approximate
 			// the node as a sphere to hurry this up.
-			if (isFinite(max) && Vec3.len(pos) > max + 0.8660254) {
-				return null;
+			var hscale = scale * 0.5;
+			var dx = pos[0] - offset[0] - hscale;
+			var dy = pos[1] - offset[1] - hscale;
+			var dz = pos[2] - offset[2] - hscale;
+			if (isFinite(max)) {
+				var maxRadius = max + 0.8660254 * scale;
+				if (dx * dx + dy * dy + dz * dz > maxRadius * maxRadius) {
+					return null;
+				}
 			}
 			
 			// Find the closest child node.
-			var x = (pos[0] > 0.0) ? 1 : 0;
-			var y = (pos[1] > 0.0) ? 2 : 0;
-			var z = (pos[2] > 0.0) ? 4 : 0;
+			var x = (dx > 0.0) ? 1 : 0;
+			var y = (dy > 0.0) ? 2 : 0;
+			var z = (dz > 0.0) ? 4 : 0;
 			var i = x | y | z;
 			
 			// Check children in approximate order of closeness.
-			var best = nearChild(pred, node, i, pos, max);
-			best = minDis(best, nearChild(pred, node, i ^ 1, pos, best ? best.dis : max)); 
-			best = minDis(best, nearChild(pred, node, i ^ 2, pos, best ? best.dis : max)); 
-			best = minDis(best, nearChild(pred, node, i ^ 4, pos, best ? best.dis : max)); 
-			best = minDis(best, nearChild(pred, node, i ^ 3, pos, best ? best.dis : max));
-			best = minDis(best, nearChild(pred, node, i ^ 6, pos, best ? best.dis : max));
-			best = minDis(best, nearChild(pred, node, i ^ 5, pos, best ? best.dis : max)); 
-			best = minDis(best, nearChild(pred, node, i ^ 7, pos, best ? best.dis : max));
+			var bestDis = max;
+			var best = nearNode(pred, node.children[i], hscale, 
+				Volume.getOffset(scale, offset, i), pos, max);
+			if (best) bestDis = best.dis;
+			for (var j = 1; j < 8; j++) {
+				var k = i ^ j;
+				var val = nearNode(pred, node.children[k], hscale,
+					Volume.getOffset(scale, offset, k), pos, max);
+				if (val !== null && val.dis < bestDis) {
+					best = val;
+					bestDis = val.dis;
+				}
+			}
 			
 			// Return closest found point.
 			return best;
 		}
-	}
-	
-	// Like 'near', but allows the position and size (edge-length) of the
-	// node to be chosen.
-	function nearTransformed(pred, node, size, offset, pos, max) {
-		var nPos = Vec3.scale(Vec3.sub(pos, offset), 1.0 / size);
-		var res = near(pred, node, nPos, max / size);
-		if (res !== null) {
-			res.dis *= size;
-			res.point = Vec3.add(Vec3.scale(res.point, size), offset);
-		}
-		return res;
 	}
 	
 	// Returns information about the intersection between a ray and a plane, or null
@@ -813,8 +846,10 @@ var Vec3 = Volume.Vector;
 	// Define exports.
 	this.Vector.cross = cross;
 	this.Permutation.sort = sort;
-	this.near = near;
-	this.nearTransformed = nearTransformed;
+	this.nearPoint = nearPoint;
+	this.nearAxialLine = nearAxialLine;
+	this.nearAxialPlane = nearAxialPlane;
+	this.nearNode = nearNode;
 	this.tracePlane = tracePlane;
 	this.traceSphere = traceSphere;
 	this.traceLine = traceLine;

@@ -4,7 +4,7 @@ function Editor(canvas, node, undo) {
 	this.canvas = canvas;
 	this.gl = createGLContext(canvas);
 	this.node = node;
-	this.camera = new Editor.Camera([-0.1, 0.0, 0.1], 0.0, -0.8); 
+	this.camera = new Editor.Camera([0.4, 0.5, 0.6], 0.0, -0.8); 
 	this.renderNode = function() { }
 	this.getMovement = Input.Signal.wasd.link(canvas);
 	this.maxDis = 0.5;
@@ -15,9 +15,9 @@ function Editor(canvas, node, undo) {
 	
 	var t = 1.0 / (1 << 7);
 	this.boxes = [new Editor.Box(new Volume.Bound(
-		[-8 * t, -8 * t, -8 * t],
-		[8 * t, 8 * t, 8 * t]), t)];
-	this.plane = new Editor.Plane(this.boxes[0], 2, 0 * t, -1 * t);
+		[56 * t, 56 * t, 56 * t],
+		[72 * t, 72 * t, 72 * t]), t)];
+	this.plane = new Editor.Plane(this.boxes[0], 2, 64 * t, 63 * t);
 	
 	this.renderPlane = null;
 	this.renderPlaneFor = null;
@@ -760,7 +760,7 @@ function Editor(canvas, node, undo) {
 		// Compute camera distance from matter in the scene.
 		function pred(node) { return node !== Matter.empty; }
 		for (var i = 0; i < 3; i++) {
-			var near = Volume.nearTransformed(pred, this.node, 1.0, 
+			var near = Volume.nearNode(pred, this.node, 1.0, 
 				Vec3.zero, this.camera.pos, this.maxDis);
 			this.lastDis = near ? near.dis : this.maxDis;
 			if (near && near.dis < this.minDis) {

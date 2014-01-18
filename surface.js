@@ -1,6 +1,9 @@
 // Contains functions and types related to renderable 2D surfaces.
 var Surface = new function() {
 
+	// TODO: Update local coordinate system for nodes from centered at the origin to
+	// centered at (0.5, 0.5, 0.5).
+
 	// A spatial node that describes the visual contents of
 	// a square 2D area.
 	var Node = Area.Node();

@@ -5,11 +5,6 @@ var Matter = new function() {
 	// a cubic 3D area.
 	var Node = Volume.Node();
 	
-	// Represents a volume that is not visible, and thus can 
-	// be rendered in any way.
-	var inside = Node.leaf();
-	inside.substance = Substance.empty;
-	
 	// Gets the leaf node for the given substance.
 	function lookup(substance) {
 		if (substance.node) return substance.node;
@@ -21,6 +16,9 @@ var Matter = new function() {
 	
 	// Represents a volume that is empty.
 	var empty = lookup(Substance.empty);
+	
+	// Represents a volume with undefined visual properties.
+	var inside = lookup(Substance.inside);
 	
 	// Gets a solid matter node for a material.
 	function solidUniform(material) {

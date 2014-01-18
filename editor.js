@@ -484,7 +484,7 @@ function Editor(canvas, node, undo) {
 			this.prototype.update = function(editor, point) {
 				var ray = editor.unproj(point);
 				var aPos = Vec3.unproj(this.pPos, this.axis, 0.0);
-				var aDir = Vec3.getUnit(this.axis, false);
+				var aDir = Vec3.getUnit(this.axis, true);
 				var res = Volume.traceLine(aPos, aDir, ray.pos, ray.dir);
 				var param = Math.round(res.aParam / this.box.scale) * this.box.scale;
 				var bound = this.box.bound;

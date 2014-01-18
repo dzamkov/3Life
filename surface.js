@@ -8,11 +8,6 @@ var Surface = new function() {
 	// a square 2D area.
 	var Node = Area.Node();
 	
-	// Represents an area that is not visible, and thus can 
-	// be rendered in any way.
-	var inside = Node.leaf();
-	inside.material = Material.empty;
-	
 	// A special value used in delta surfaces. This represents an
 	// area that has not changed from the base surface.
 	var same = Node.leaf();
@@ -28,6 +23,9 @@ var Surface = new function() {
 	
 	// Represents an area that is empty.
 	var empty = lookup(Material.empty);
+	
+	// Represents an area that with undefined visual properties.
+	var inside = lookup(Material.inside);
 
 	// Describes a rectangular rendering primitive that can be used to display
 	// part of a surface. Each Quad has a single material, and a lower and upper

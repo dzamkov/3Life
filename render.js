@@ -29,7 +29,7 @@ var Render = new function() {
 	function buildNode(builders, node, scale, offset) {
 		if (node.depth == 0) {
 			var substance = node.substance;
-			if (substance !== Substance.empty && substance instanceof Substance.Solid) {
+			if (substance instanceof Substance.Solid.Simple) {
 				var bound = Volume.Bound.unit.transform(scale, offset);
 				var verts = new Array(4);
 				for (var axis = 0; axis < 3; axis++) {
@@ -37,7 +37,7 @@ var Render = new function() {
 					for (var i = 0; i < 2; i++) {
 						var val = (i == 1) ? bound.max[axis] : bound.min[axis];
 						var norm = Vec3.getUnit(axis, i == 1);
-						var material = substance.getFaceMaterial(axis, i == 1);
+						var material = substance.outward(axis, i == 1);
 						var builder = getBuilder(builders, material);
 						for (var j = 0; j < 4; j++) {
 							verts[j] = builder.vertex(Vec3.unproj(

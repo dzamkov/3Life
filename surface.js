@@ -26,6 +26,18 @@ var Surface = new function() {
 	
 	// Represents an area that with undefined visual properties.
 	var inside = lookup(Material.inside);
+	
+	// Gets a surface description of a slice within a solid block of the given substance.
+	// This will either be 'empty' or 'inside'.
+	function within(substance) {
+		if (substance === Matter.inside) {
+			return Surface.inside;
+		} else if (substance instanceof Substance.Solid && substance.isOpaque) {
+			return Surface.inside;
+		} else {
+			return Surface.empty;
+		}
+	}
 
 	// Describes a rectangular rendering primitive that can be used to display
 	// part of a surface. Each Quad has a single material, and a lower and upper
@@ -299,268 +311,16 @@ var Surface = new function() {
 	inside.view = new View([], [], [Rect.unit]);
 	empty.view = new View([], [], []);
 	
-	// Contains functions for slicing (getting a surface for) matter along the given axis.
-	function Slice(axis) {
-		var z = axis;
-		var x = (axis + 1) % 3;
-		var y = (axis + 2) % 3;
-		
-		var zF = 1 << z;
-		var xF = 1 << x;
-		var yF = 1 << y;
-		
-		// The indices for the children nodes in the first half of a matter node,
-		// where halves are defined by the slice axis.
-		var ni = [0, xF, yF, xF | yF];
-		
-		// The indices for the children nodes in the second half of a matter node,
-		// where halves are defined by the slice axis.
-		var pi = [zF, xF | zF, yF | zF, xF | yF | zF];
-	
-		// Gets the surface between two nodes of matter that are assumed to be adjacent
-		// along the slice axis. The first of nodes will be the "back" of the surface unless
-		// the 'flip' parameter is set. This function can also be used to get the delta surface
-		// between two matter nodes that change as defined in the given boolean volume nodes.
-		function betweenDelta(n, nChange, p, pChange, flip) {
-			if (nChange === Volume.Boolean.false &&
-				pChange === Volume.Boolean.false)
-				return same;
-			else if (n.depth == 0 && p.depth == 0) {
-				if (n === Matter.inside || p === Matter.inside) return inside;
-				var n = n.substance;
-				var p = p.substance;
-				if (flip) {
-					var temp = p;
-					p = n;
-					n = temp;
-				}
-				if (!p.isTransparent) return inside;
-				if (n === p) return empty;
-				if (n instanceof Substance.Solid)
-					return lookup(n.getFaceMaterial(axis, flip));
-				return empty;
-			} else {
-				var children = new Array(4);
-				for (var i = 0; i < 4; i++) {
-					children[i] = betweenDelta(
-						n.children[pi[i]], nChange.children[pi[i]],
-						p.children[ni[i]], pChange.children[ni[i]], flip);
-				}
-				return Node.get(children);
-			}
-		}
-		
-		// Like 'betweenDelta', but returns a non-delta surface.
-		function between(n, p, flip) {
-			return betweenDelta(n, Volume.Boolean.true, p, Volume.Boolean.true, flip);
-		}
-		
-		// Gets a slice of the given matter node along a plane with the given position
-		// relative to the center plane. The position should be within the exclusive
-		// bounds of -0.5 to 0.5. The 'flip' parameter is a boolean that indicates
-		// the direction of the slice when a surface is met. This function can be
-		// used to get a delta surface by specifying which parts of the matter node
-		// have changed in a boolean volume node.
-		function withinDelta(node, change, pos, flip) {
-			if (change === Volume.Boolean.false) {
-				return same;
-			} else if (node.depth == 0) {
-				return (node !== Matter.inside && node.substance.isTransparent) ? empty : inside;
-			} else {
-				if (pos == 0.0) {
-					var children = new Array(4);
-					for (var i = 0; i < 4; i++) {
-						children[i] = betweenDelta(
-							node.children[ni[i]], change.children[ni[i]],
-							node.children[pi[i]], change.children[pi[i]], flip);
-					}
-					return Node.get(children);
-				} else {
-					var ki, npos;
-					if (pos > 0.0) {
-						ki = pi;
-						npos = pos * 2.0 - 0.5;
-					} else {
-						ki = ni;
-						npos = pos * 2.0 + 0.5;
-					}
-					var children = new Array(4);
-					for (var i = 0; i < 4; i++) {
-						children[i] = withinDelta(node.children[ki[i]],
-							change.children[ki[i]], npos, flip);
-					}
-					return Node.get(children);
-				}
-			}
-		}
-		
-		// Like 'within', but returns a non-delta surface.
-		function within(node, pos, flip) {
-			return withinDelta(node, Volume.Boolean.true, pos, flip);
-		}
-		
-		var allCache = new HashMap(3049);
-		
-		// Gets a complete description of the slices in the given matter node, the result
-		// of which can be used to compute any 'withinDelta' slice. This function can be used
-		// to get delta surfaces by specifying which parts of the matter node have changed
-		// in a boolean volume node.
-		function allDelta(node, change) {
-			
-			// Note: The structure of the objects returned is as follows:
-			// { head : Node, tail : [{ pos : Number, at : [Node, Node], after : Node }] }
-			
-			// 'head' specifies the slice that appears at positions near -0.5.
-			// 'tail' specifies all "discontinuities" in the following slice.
-			// 'pos' specifies the position of a discontinuity.
-			// 'at' specifies the slices (one for each 'flip' value) that appear at the discontinuity.
-			// 'after' specifies the slices directly following the discontinuity.
-		
-			if (change === Volume.Boolean.false) {
-				return { head : same, tail : [] };
-			} else if (node.depth == 0) {
-				var head = (node !== Matter.inside && node.substance.isTransparent) ? empty : inside;
-				return { head : head, tail : [] };
-			} else {
-				function compute(node, change) {
-					
-					// Computes the slices for a half of the given node and pushes
-					// them to the given tail array. Returns the head of the slices.
-					function half(node, change, ki, offset, tail) {
-						var tails = new Array(4);
-						var counter = new Array(4);
-						var current = new Array(4);
-						var children = new Array(4);
-						for (var i = 0; i < 4; i++) {
-							var sub = allDelta(node.children[ki[i]], change.children[ki[i]]);
-							tails[i] = sub.tail;
-							counter[i] = 0;
-							current[i] = children[i] = sub.head;
-						}
-						var head = Node.get(children);
-						while (true) {
-						
-							// Find the first place with a discontinuity.
-							var firstPos = 0.5;
-							for (var i = 0; i < 4; i++) {
-								if (counter[i] < tails[i].length) {
-									firstPos = Math.min(firstPos, tails[i][counter[i]].pos);
-								}
-							}
-							if (firstPos == 0.5) break;
-							
-							// Determine the full slices at that discontinuity.
-							var atChildren = [new Array(4), new Array(4)];
-							var afterChildren = new Array(4);
-							for (var i = 0; i < 4; i++) {
-								var dis = tails[i][counter[i]];
-								if (dis && dis.pos == firstPos) {
-									atChildren[0][i] = dis.at[0];
-									atChildren[1][i] = dis.at[1];
-									afterChildren[i] = dis.after;
-									current[i] = dis.after;
-									counter[i]++;
-								} else {
-									atChildren[0][i] = current[i];
-									atChildren[1][i] = current[i];
-									afterChildren[i] = current[i];
-								}
-							}
-							
-							// Push the discontinuity.
-							tail.push({
-								pos : firstPos * 0.5 + offset,
-								at : [Node.get(atChildren[0]), Node.get(atChildren[1])],
-								after : Node.get(afterChildren)});
-						}
-						
-						// Return the head.
-						return head;
-					}
-					
-					// Get center 'at' slices.
-					var atChildren = [new Array(4), new Array(4)];
-					for (var i = 0; i <= 1; i++) {
-						for (var j = 0; j < 4; j++) {
-							atChildren[i][j] = betweenDelta(
-								node.children[ni[j]], change.children[ni[j]], 
-								node.children[pi[j]], change.children[pi[j]], i == 1);
-						}
-					}
-					var centerAt = [Node.get(atChildren[0]), Node.get(atChildren[1])];
-					var center = { pos : 0.0, at : centerAt };
-					
-					// Construct result by combining the results from the first set of children, the
-					// center slice, and the results from the second set of children.
-					var tail = new Array();
-					var nHead = half(node, change, ni, -0.25, tail);
-					var centerIndex = tail.length;
-					tail.push(center);
-					var pHead = center.after = half(node, change, pi, 0.25, tail);
-					
-					// Remove center if it is not a discontinuity.
-					if (centerAt[0] === centerAt[1] && centerAt[0] === pHead) {
-						var before = (centerIndex == 0) ? nHead : tail[centerIndex - 1].after;
-						if (before === centerAt[0]) {
-							tail.splice(centerIndex, 1);
-						}
-					}
-					return { head : nHead, tail : tail };
-				}
-				
-				// Make sure to save and use work we've already done.
-				return allCache.lookup([node, change], function(info) {
-					return compute(info[0], info[1]);
-				});
-			}
-		}
-		
-		// Like 'all', but returns non-delta surfaces.
-		function all(node) {
-			return allDelta(node, Volume.Boolean.true);
-		}
-
-		// Projects a vector on a surface into 3D space.
-		function project(vec, pos) {
-			var res = new Array(3);
-			res[x] = vec[0];
-			res[y] = vec[1];
-			res[z] = pos;
-			return res;
-		}
-		
-		// Define exports.
-		var Slice = { }
-		Slice.betweenDelta = betweenDelta;
-		Slice.withinDelta = withinDelta;
-		Slice.allDelta = allDelta;
-		Slice.between = between;
-		Slice.within = within;
-		Slice.all = all;
-		Slice.project = project;
-		return Slice;
-	}
-	
-	// Create Slice objects.
-	var Slice = [Slice(0), Slice(1), Slice(2)];
-	
-	// Gets the Z position of slice 'i' within the results of 
-	// an 'all' operation on a node of depth 'd'.
-	Slice.pos = function(i, d) {
-		return (i + 1) / (2 << d) - 0.5;
-	}
-	
 	// Define exports.
 	this.Node = Node;
 	this.get = Node.get;
 	this.merge = Node.merge;
 	this.inside = inside;
-	this.same = same;
 	this.empty = empty;
+	this.within = within;
 	this.lookup = lookup;
 	this.Quad = Quad;
 	this.View = View;
 	this.view = view;
 	this.update = update;
-	this.Slice = Slice;
 }

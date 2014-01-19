@@ -24,34 +24,45 @@ var Render = new function() {
 		});
 	}
 	
-	// Appends the surface contents of a matter node (with the given transformation
-	// applied) to a HashMap of mesh builders indexed by material.
-	function buildNode(builders, node, scale, offset) {
+	// Appends the contents of a surface node (with the given transformation information)
+	// to a HashMap of mesh builders indexed by material.
+	function buildSurfaceNode(builders, axis, flip, pos, norm, node, scale, offset) {
 		if (node.depth == 0) {
-			var substance = node.substance;
-			if (substance instanceof Substance.Solid.Simple) {
-				var bound = Volume.Bound.unit.transform(scale, offset);
+			var material = node.material;
+			if (material !== Material.empty && material !== Material.inside) {
+				var builder = getBuilder(builders, material);
+				var bound = Area.Bound.unit.transform(scale, offset);
 				var verts = new Array(4);
-				for (var axis = 0; axis < 3; axis++) {
-					var pBound = bound.proj(axis);
-					for (var i = 0; i < 2; i++) {
-						var val = (i == 1) ? bound.max[axis] : bound.min[axis];
-						var norm = Vec3.getUnit(axis, i == 1);
-						var material = substance.outward(axis, i == 1);
-						var builder = getBuilder(builders, material);
-						for (var j = 0; j < 4; j++) {
-							verts[j] = builder.vertex(Vec3.unproj(
-								pBound.getCorner(j), axis, val), norm);
-						}
-						if (i == 1) builder.quad(verts[0], verts[1], verts[2], verts[3]);
-						else builder.quad(verts[0], verts[2], verts[1], verts[3]);
-					}
+				for (var i = 0; i < 4; i++) {
+					verts[i] = builder.vertex(
+						Vec3.unproj(bound.getCorner(i), axis, pos),
+						norm);
 				}
+				if (flip) builder.quad(verts[0], verts[1], verts[2], verts[3]);
+				else builder.quad(verts[0], verts[2], verts[1], verts[3]);
 			}
 		} else {
-			for (var i = 0; i < 8; i++) {
-				buildNode(builders, node.children[i], scale * 0.5,
-					Volume.getOffset(scale, offset, i));
+			for (var i = 0; i < 4; i++) {
+				buildSurfaceNode(builders, axis, flip, pos, norm, node.children[i],
+					scale * 0.5, Area.getOffset(scale, offset, i));
+			}
+		}
+	}
+	
+	// Appends the surface contents of a matter node (with the given transformation
+	// applied) to a HashMap of mesh builders indexed by material.
+	function buildMatterNode(builders, node, scale, offset) {
+		for (var axis = 0; axis < 3; axis++) {
+			var pOffset = Vec3.proj(offset, axis);
+			var disconts = Matter.slice(axis, node).tail;
+			for (var i = 0; i < disconts.length; i++) {
+				var discont = disconts[i];
+				buildSurfaceNode(builders, axis, false, 
+					discont.pos, Vec3.getUnit(axis, false),
+					discont.at[0], scale, pOffset);
+				buildSurfaceNode(builders, axis, true, 
+					discont.pos, Vec3.getUnit(axis, true),
+					discont.at[1], scale, pOffset);
 			}
 		}
 	}
@@ -59,7 +70,7 @@ var Render = new function() {
 	// Creates and returns a function to render a node (given the 'viewProj' matrix).
 	function prepareRenderNode(gl, node, scale, offset) {
 		var builders = new HashMap(13);
-		buildNode(builders, node, scale, offset);
+		buildMatterNode(builders, node, scale, offset);
 		var opaque = new Array();
 		builders.forEach(function(mat, builder) {
 			var part = { 
@@ -92,6 +103,7 @@ var Render = new function() {
 	this.vertexSize = vertexSize;
 	this.attributes = attributes;
 	this.getBuilder = getBuilder;
-	this.buildNode = buildNode;
+	this.buildSurfaceNode = buildSurfaceNode;
+	this.buildMatterNode = buildMatterNode;
 	this.prepareRenderNode = prepareRenderNode;
 }

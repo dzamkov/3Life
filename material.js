@@ -130,10 +130,12 @@ function Substance() { }
 		
 		// Gets the material between two adjacent blocks of the given solid substances
 		// along the given axis.
-		function between(axis, flip, front, back) {
-			if (front === back) {
-				return front.isOpaque ? Material.inside : Material.empty;
+		function between(axis, flip, n, p) {
+			if (n === p) {
+				return n.isOpaque ? Material.inside : Material.empty;
 			} else {
+				var front = flip ? p : n;
+				var back = flip ? n : p;
 				if (front.isOpaque) {
 					return Material.inside;
 				} else if (back instanceof Simple) {
@@ -145,6 +147,7 @@ function Substance() { }
 	
 		// Define exports.
 		this.Simple = Simple;
+		this.between = between;
 	}).call(Solid);
 
 	// A substance that is completely transparent.
@@ -155,20 +158,20 @@ function Substance() { }
 	
 	// Gets the material between two adjacent blocks of the given substances along the
 	// given axis.
-	function between(axis, flip, front, back) {
-		if (font === inside || back === inside) {
+	function between(axis, flip, n, p) {
+		if (n === inside || p === inside) {
 			return Material.inside;
-		} else if (front instanceof Solid) {
-			if (front.isOpaque) {
-				return Material.inside;
-			} else if (back instanceof Solid) {
-				return Solid.between(axis, flip, front, back);
+		} else if (n instanceof Solid) {
+			if (p instanceof Solid) {
+				return Solid.between(axis, flip, n, p);
+			} else if (flip) {
+				return n.outward(axis, flip);
 			} else {
 				return Material.empty;
 			}
 		} else {
-			if (back instanceof Solid) {
-				return back.outward(axis, flip);
+			if (p instanceof Solid && !flip) {
+				return p.outward(axis, flip);
 			} else {
 				return Material.empty;
 			}

@@ -233,5 +233,5 @@ Gol.getMatter = function(node) {
 Gol.getMatter.dead = Matter.empty;
 delay(Texture.metal, function(texture) {
 	Gol.getMatter.live = Matter.solidUniform(Material.texture(
-		texture, 1.0 / (1 << 7), Vec3.zero, false));
+		texture, [1, 1, 1, 1], 1.0 / (1 << 7), Vec3.zero, true));
 });

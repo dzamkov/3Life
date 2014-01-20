@@ -9,13 +9,6 @@ var Render = new function() {
 		pos : { size : 3, offset : 0 },
 		norm : { size : 3, offset : 3 }
 	};
-
-	// Appends a block cuboid (described by the given bound) to a mesh builder.
-	function buildCuboid(builder, bound) {
-		var min = bound.min;
-		var max = bound.max;
-		
-	}
 	
 	// Gets the builder for the given material from a HashMap of mesh builders.
 	function getBuilder(builders, material) {
@@ -67,35 +60,69 @@ var Render = new function() {
 		}
 	}
 	
+	// Prepares the renderable parts (program/mesh pairs) defined by the given builders,
+	// outputing them to the appropriate array (either 'opaque' or 'transparent'). The
+	// given map function can be used to modify materials before they are used in parts.
+	function prepareParts(gl, builders, map, opaque, transparent) {
+		builders.forEach(function(mat, builder) {
+			mat = map(mat);
+			var part = {
+				mat : mat,
+				program : mat.program.get(gl),
+				mesh : builder.finish().create(gl)
+			}
+			if (mat.isOpaque) {
+				opaque.push(part);
+			} else {
+				transparent.push(part);
+			}
+		});
+	}
+	
+	// Renders the given part with the given parameters.
+	function renderPart(gl, part, model, viewProj) {
+		part.mat.setupTextures(gl);
+		gl.render(part.program, part.mesh, {
+			model : model,
+			view : viewProj,
+			__proto__ : part.mat.constants
+		});
+	}
+	
+	// Renders the given set of parts with the given parameters.
+	function renderParts(gl, opaque, transparent, model, viewProj) {
+		for (var i = 0; i < opaque.length; i++) {
+			renderPart(gl, opaque[i], model, viewProj);
+		}
+		
+		// TODO: Depth peeling.
+		
+		gl.colorMask(false, false, false, false);
+		for (var i = 0; i < transparent.length; i++) {
+			renderPart(gl, transparent[i], model, viewProj);
+		}
+		gl.colorMask(true, true, true, true);
+		gl.depthFunc(gl.EQUAL);
+		gl.enable(gl.BLEND);
+		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+		for (var i = 0; i < transparent.length; i++) {
+			renderPart(gl, transparent[i], model, viewProj);
+		}
+		gl.disable(gl.BLEND);
+		gl.depthFunc(gl.LESS);
+	}
+	
 	// Creates and returns a function to render a node (given the 'viewProj' matrix).
 	function prepareRenderNode(gl, node, scale, offset) {
 		var builders = new HashMap(13);
 		buildMatterNode(builders, node, scale, offset);
 		var opaque = new Array();
-		builders.forEach(function(mat, builder) {
-			var part = { 
-				mat : mat, 
-				program : mat.program.get(gl),
-				mesh : builder.finish().create(gl)
-			}
-			if (mat.isTransparent) {
-				notImplemented();
-			} else {
-				opaque.push(part);
-			}
-		});
+		var transparent = new Array();
+		prepareParts(gl, builders, identity, opaque, transparent);
 		var model = mat4.create();
 		mat4.identity(model);
 		return function(viewProj) {
-			for (var i = 0; i < opaque.length; i++) {
-				var part = opaque[i];
-				part.mat.setupTextures(gl);
-				gl.render(part.program, part.mesh, {
-					model : model,
-					view : viewProj,
-					__proto__ : part.mat.constants
-				});
-			}
+			renderParts(gl, opaque, transparent, model, viewProj);
 		}
 	}
 	
@@ -105,5 +132,8 @@ var Render = new function() {
 	this.getBuilder = getBuilder;
 	this.buildSurfaceNode = buildSurfaceNode;
 	this.buildMatterNode = buildMatterNode;
+	this.prepareParts = prepareParts;
+	this.renderPart = renderPart;
+	this.renderParts = renderParts;
 	this.prepareRenderNode = prepareRenderNode;
 }

@@ -211,6 +211,9 @@ var Global = this;
 // A function that does nothing.
 function ignore() { }
 
+// A function that returns its input.
+function identity(input) { return input; }
+
 // Combines a set of actions (parameterless functions) into one action.
 function combine(actions) {
 	actions = actions.filter(function(action) { return action !== ignore; });

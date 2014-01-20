@@ -9,6 +9,7 @@ var Matter = new function() {
 	function lookup(substance) {
 		if (substance.node) return substance.node;
 		var node = Node.leaf();
+		node.isSubstantial = (substance instanceof Substance.Solid && substance.isOpaque);
 		node.substance = substance;
 		substance.node = node;
 		return node;

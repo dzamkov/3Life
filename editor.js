@@ -4,8 +4,7 @@ function Editor(canvas, node, undo) {
 	this.canvas = canvas;
 	this.gl = createGLContext(canvas);
 	this.node = node;
-	this.camera = new Editor.Camera([0.4, 0.5, 0.6], 0.0, -0.8); 
-	this.renderNode = function() { }
+	this.camera = new Editor.Camera([0.4, 0.5, 0.6], 0.0, -0.8);
 	this.getMovement = Input.Signal.wasd.link(canvas);
 	this.maxDis = 0.5;
 	this.minDis = 0.001;
@@ -18,9 +17,7 @@ function Editor(canvas, node, undo) {
 		[56 * t, 56 * t, 56 * t],
 		[72 * t, 72 * t, 72 * t]), t)];
 	this.plane = new Editor.Plane(this.boxes[0], 2, 64 * t, 63 * t);
-	
-	this.renderPlane = null;
-	this.renderPlaneFor = null;
+	this.updateRender();
 	
 	var editor = this;
 	var point = [0, 0];
@@ -155,6 +152,19 @@ function Editor(canvas, node, undo) {
 			return block.unproj(this.axis,
 				Math.min(this.lead, this.trail),
 				Math.max(this.lead, this.trail));
+		}
+		
+		// Gets the bound for the volume that is between the selection box and the leading
+		// plane for this edit plane. This volume appears transparent and is insubstantial
+		// during editing.
+		this.prototype.getAlphaBound = function() {
+			var boxBound = this.box.bound;
+			var pBound = boxBound.proj(this.axis);
+			if (this.lead > this.trail) {
+				return pBound.unproj(this.axis, this.lead, boxBound.max[this.axis]);
+			} else {
+				return pBound.unproj(this.axis, boxBound.min[this.axis], this.lead);
+			}
 		}
 
 		// Sets the box for this plane, automatically adjusting the
@@ -291,14 +301,12 @@ function Editor(canvas, node, undo) {
 		var program = blockProgram.get(gl);
 		var mesh = Mesh.Block.cube.get(gl);
 		gl.enable(gl.BLEND);
-		gl.disable(gl.DEPTH_TEST);
 		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 		gl.render(program, mesh, {
 			color : [0.7, 0.7, 0.7, 0.5],
 			model : model,
 			view : view });
 		gl.disable(gl.BLEND);
-		gl.enable(gl.DEPTH_TEST);
 	}
 	
 	// Gives feedback and modifies the editor while the mouse is dragged from a control.
@@ -351,7 +359,7 @@ function Editor(canvas, node, undo) {
 					var pBlock = editor.plane.unprojBlock(this.blocks[i]);
 					node = node.splice(pBlock, editor.getDrawNode());
 				}
-				editor.setNode(node);
+				editor.updateNode(node);
 			}
 			
 			// Updates this paint drag handler when a new block is being dragged over.
@@ -389,7 +397,8 @@ function Editor(canvas, node, undo) {
 				var b = up ? area.min[idep] : area.max[idep];
 				var res = new Array(size[idep] / scale);
 				for (var i = 0; i < res.length; i++) {
-					var na = Math.round((area.min[dep] + size[dep] * (i + 1) / res.length) / scale) * scale;
+					var na = Math.round((area.min[dep] + size[dep] * (i + 1) / res.length)
+						/ scale) * scale;
 					var nb = up ? (b + scale) : (b - scale);
 					var min = new Array(2);
 					var max = new Array(2);
@@ -463,7 +472,7 @@ function Editor(canvas, node, undo) {
 				var nBox = box.setBound(box.bound.setCorner(this.cornerIndex, nPoint));
 				var plane = editor.plane;
 				if (plane && plane.box == box) {
-					editor.plane = plane.setBox(nBox);
+					editor.updatePlane(plane.setBox(nBox));
 				}
 				editor.boxes[this.boxIndex] = nBox;
 			}
@@ -492,11 +501,13 @@ function Editor(canvas, node, undo) {
 				var plane = editor.plane;
 				if (this.lead) {
 					if (param != plane.trail) {
-						editor.plane = new Editor.Plane(plane.box, this.axis, param, plane.trail);
+						editor.updatePlane(new Editor.Plane(
+							plane.box, this.axis, param, plane.trail));
 					}
 				} else {
 					if (param != plane.lead) {
-						editor.plane = new Editor.Plane(plane.box, this.axis, plane.lead, param);
+						editor.updatePlane(new Editor.Plane(
+							plane.box, this.axis, plane.lead, param));
 					}
 				}
 			}
@@ -591,7 +602,8 @@ function Editor(canvas, node, undo) {
 				var scale = this.box.scale;
 				var tDir = (editor.camera.pos[this.axis] > this.param) ? -scale : scale;
 				var trail = this.param + tDir;
-				editor.plane = new Editor.Plane(this.box, this.axis, this.param, trail);
+				var nPlane = new Editor.Plane(this.box,this.axis, this.param, trail);
+				editor.updatePlane(nPlane);
 				return new DragHandler.Plane(this.box, this.axis, false, this.pPos);
 			}
 		}).call(Plane);
@@ -603,9 +615,36 @@ function Editor(canvas, node, undo) {
 	}).call(Control);
 	
 	// Sets the node for this editor.
-	this.prototype.setNode = function(node) {
+	this.prototype.updateNode = function(node) {
 		this.node = node;
-		this.renderNode = Render.prepareRenderNode(this.gl, node, 1.0, Vec3.zero);
+		this.updateRender();
+	}
+	
+	// Sets the plane for this editor.
+	this.prototype.updatePlane = function(plane) {
+		this.plane = plane;
+		this.updateRender();
+	}
+	
+	// Updates the functions used to render the node and the selection plane in this
+	// editor.
+	this.prototype.updateRender = function() {
+		var alphaBound = this.plane.getAlphaBound();
+		this.solidNode = this.node.splice(alphaBound, Matter.empty);
+		var transNode = Matter.empty.splice(alphaBound, this.node);
+		
+		var builders = new HashMap(13);
+		Render.buildMatterNode(builders, this.solidNode, 1.0, Vec3.zero);
+		this.opaqueParts = new Array();
+		this.transParts = new Array();
+		Render.prepareParts(this.gl, builders, identity,
+			this.opaqueParts, this.transParts);
+		builders = new HashMap(13);
+		Render.buildMatterNode(builders, transNode, 1.0, Vec3.zero);
+		Render.prepareParts(this.gl, builders, function(mat) {
+			return mat.modulate([0.1, 0.3, 0.5, 0.2]);
+		}, this.opaqueParts, this.transParts);
+		this.renderPlane = prepareRenderPlane(this.gl, this.plane);
 	}
 	
 	// Gets the current viewProj matrix for this editor.
@@ -732,7 +771,10 @@ function Editor(canvas, node, undo) {
 		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 		
 		var viewProj = this.getViewProj();
-		this.renderNode(viewProj);
+		var model = mat4.create(); mat4.identity(model);
+		Render.renderParts(gl, this.opaqueParts, this.transParts, model, viewProj);
+		
+		gl.clear(gl.DEPTH_BUFFER_BIT);
 		if (this.dragHandler) {
 			this.dragHandler.renderIndicator(this, gl, viewProj);
 		} else if (this.control) {
@@ -740,10 +782,6 @@ function Editor(canvas, node, undo) {
 		}
 		for (var i = 0; i < this.boxes.length; i++)
 			renderBox(gl, this.boxes[i], viewProj, this.camera.pos);
-		if (this.renderPlaneFor != this.plane) {
-			this.renderPlane = prepareRenderPlane(gl, this.plane);
-			this.renderPlaneFor = this.plane;
-		}
 		this.renderPlane(viewProj, this.camera.pos);
 	}
 	
@@ -758,9 +796,9 @@ function Editor(canvas, node, undo) {
 		}
 	
 		// Compute camera distance from matter in the scene.
-		function pred(node) { return node !== Matter.empty; }
+		function pred(node) { return node.isSubstantial; }
 		for (var i = 0; i < 3; i++) {
-			var near = Volume.nearNode(pred, this.node, 1.0, 
+			var near = Volume.nearNode(pred, this.solidNode, 1.0, 
 				Vec3.zero, this.camera.pos, this.maxDis);
 			this.lastDis = near ? near.dis : this.maxDis;
 			if (near && near.dis < this.minDis) {

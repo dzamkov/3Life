@@ -16,11 +16,20 @@ function Material(isOpaque) {
 	// for this material.
 	this.prototype.constants = { };
 	
+	// Creates a new material that appears like this material, but with all colors
+	// multiplied by the given factor.
+	this.prototype.modulate = function(color) { return this; }
+
 	// Sets up the textures used by this material.
 	this.prototype.setupTextures = function(gl) { }
+	
+	// Modulates a color by another color.
+	function modulateColor(a, b) {
+		return [a[0] * b[0], a[1] * b[1], a[2] * b[2], a[3] * b[3]];
+	}
 
-	// Represents a solid-colored material, which will be
-	// transparent if the optional alpha parameter is specified.
+	// Represents a solid-colored material, which will be transparent if the optional
+	// alpha parameter is specified.
 	function Color(color) {
 		Material.call(this, color[3] < 1.0);
 		this.color = color;
@@ -33,19 +42,24 @@ function Material(isOpaque) {
 		delay(Program.Block.color, (function(program) {
 			this.prototype.program = program;
 		}).bind(this), resources);
+		this.modulate = function(color) {
+			return new Color(modulateColor(this.color, color));
+		}
 		this.create = function(color) {
 			return new Color(color);
 		}
 	}).call(Color);
 	
 	// Represents a textured material.
-	function Texture(source, scale, offset, isOpaque) {
+	function Texture(source, color, scale, offset, isOpaque) {
 		Material.call(this, isOpaque);
 		this.source = source;
+		this.color = color;
 		this.scale = scale;
 		this.offset = offset;
 		this.constants = {
 			texture : 0,
+			color : color,
 			scale : scale,
 			offset : offset 
 		};
@@ -61,8 +75,12 @@ function Material(isOpaque) {
 			gl.activeTexture(gl.TEXTURE0);
 			gl.bindTexture(gl.TEXTURE_2D, this.source.get(gl));
 		}
-		this.create = function(source, scale, offset, isOpaque) {
-			return new Texture(source, scale, offset, isOpaque);
+		this.prototype.modulate = function(color) {
+			return new Texture(this.source, modulateColor(this.color, color),
+				this.scale, this.offset, this.isOpaque && color[3] >= 1.0);
+		}
+		this.create = function(source, color, scale, offset, isOpaque) {
+			return new Texture(source, color, scale, offset, isOpaque);
 		}
 	}).call(Texture);
 	
